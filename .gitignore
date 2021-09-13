@@ -24,3 +24,7 @@ endDataSet.mat
 slprj/sim/varcache/XYZ_motion_platformILCBF2/checksumOfCache.mat
 
 slprj/sim/varcache/XYZ_motion_platformILCBF2/varInfo.mat
+
+*.original
+
+slprj/
