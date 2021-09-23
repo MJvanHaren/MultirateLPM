@@ -4,12 +4,12 @@ addpath('../LPM');
 %% definitions
 TsL = 1/100;
 TsH = TsL/2;
-n = 4;
-degLPM=2;
+n = 8;
+degLPM=3;
 tperiod = 10;
 Per = 10;
 nT = Per-1;
-reference = 'low';
+reference = 'simple';
 %% systems analyzed
 s = tf('s');
 % GctH = (1/s^2+1/(s^2+2*0.1*(2*pi*10)*s+(2*pi*10)^2));
@@ -44,8 +44,8 @@ if strcmp(reference,'high')
 elseif strcmp(reference,'simple')
 %     A = ones(5,1);
 %     fs = [1 5 10 25 60];
-    A = 1;
-    fs = 5;
+    A = ones(3,1);
+    fs = [5 10 20];
     for k = 1:length(A)
         rp = rp+A(k)*sin(2*pi*fs(k)*tp+rand*2*pi);
     end
@@ -65,10 +65,11 @@ rH = repmat(rp,Per,1);
 
 %% simulate
 simoutput = sim('simFile2');
-y = simoutput.output(:,1);
-uH = simoutput.output(:,2);
-uL = simoutput.output(:,3);
-rL = simoutput.output(:,4);
+y = simoutput.high(:,1);
+uH = simoutput.high(:,2);
+eH = simoutput.high(:,3);
+uL = simoutput.low(:,2);
+eL = simoutput.low(:,1);
 %% LPM and ETFE
 % [P_LPM,THz] = LPMOpenLoopPeriodicFastBLA(r,y,n,degLPM,Per,nT);
 [P_LPM] = LPMClosedLoopPeriodicFastBLA(uH,y,rH,n,degLPM,Per,nT);
@@ -84,31 +85,46 @@ xline(fL(end),'-','Nyquist Low')
 xline(fH(end),'-','Nyquist High')
 
 figure
-
 subplot(2,2,1)
 RH = fft(rH)/sqrt(Ntot);
-RL = fft(rH)/sqrt(NtotL);
 stem(fH,abs(RH(1:Per:Per*NnH))); hold on;
-stem(fL,abs(RL(1:Per:Per*NnL)));
 set(gca,'xscale','log','yscale','log');
-legend('input rH','Downsampled input rL')
+legend('input rH')
 xlabel('Frequency [Hz]');
 ylabel('abs [-]');
+xline(fL(end),'-','Nyquist Low')
+xline(fH(end),'-','Nyquist High')
 
 subplot(2,2,2)
-UH = fft(uH)/sqrt(Ntot);
-UL = fft(uH)/sqrt(NtotL);
-stem(fH,abs(UH(1:Per:Per*NnH))); hold on;
-stem(fL,abs(UL(1:Per:Per*NnL)));
-legend('input uH','Downsampled input uL')
+EH = fft(eH)/sqrt(Ntot);
+EL = fft(eL)/sqrt(NtotL);
+stem(fH,abs(EH(1:Per:Per*NnH))); hold on;
+stem(fL,abs(EL(1:Per:Per*NnL)));
+legend('eH','downsampled error eL')
 set(gca,'xscale','log','yscale','log');
 xlabel('Frequency [Hz]');
 ylabel('abs [-]');
+xline(fL(end),'-','Nyquist Low')
+xline(fH(end),'-','Nyquist High')
 
 subplot(2,2,3)
+UH = fft(uH)/sqrt(Ntot);
+UL = fft(uL)/sqrt(NtotL);
+stem(fH,abs(UH(1:Per:Per*NnH))); hold on;
+stem(fL,abs(UL(1:Per:Per*NnL)));
+legend('upsampled input uH','input uL')
+set(gca,'xscale','log','yscale','log');
+xlabel('Frequency [Hz]');
+ylabel('abs [-]');
+xline(fL(end),'-','Nyquist Low')
+xline(fH(end),'-','Nyquist High')
+
+subplot(2,2,4)
 Y = fft(y)/sqrt(Ntot);
 stem(fH,abs(Y(1:Per:Per*NnH))); hold on;
 legend('output yH')
 set(gca,'xscale','log','yscale','log');
 xlabel('Frequency [Hz]');
 ylabel('abs [-]');
+xline(fL(end),'-','Nyquist Low')
+xline(fH(end),'-','Nyquist High')
