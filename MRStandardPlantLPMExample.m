@@ -1,8 +1,8 @@
 clear all; close all; clc;
 addpath('../LPM/')
 %% complex sinusoid
-n=3; % window size
-degLPM = 2;
+n=2; % window size
+degLPM = 1;
 per = 1;
 nT = per-1;
 j = sqrt(-1);
@@ -42,10 +42,8 @@ fsL = fs/F;
 if max(omegaSin)/2/pi > fsL/2
     error('different frequency(s) plz, this is above low nyquist');
 else
-    If0 = find(~omega);
-    If0 = 0;
-    IexcitedFrequenciesBase = [If0+omegaSin/omegaRes (If0+omegaSin/omegaRes)+(N-1)/F:(N-1)/F:0.5*(N-1)];
-    IexcitedFrequenciesNeg = [If0+(fsL*2*pi-omegaSin)/omegaRes  (If0+(fsL*2*pi-omegaSin)/omegaRes)+(N-1)/F:(N-1)/F:0.5*(N-1)]; 
+    IexcitedFrequenciesBase = [omegaSin/omegaRes (omegaSin/omegaRes)+(N-1)/F:(N-1)/F:0.5*(N-1)];
+    IexcitedFrequenciesNeg = [(fsL*2*pi-omegaSin)/omegaRes  ((fsL*2*pi-omegaSin)/omegaRes)+(N-1)/F:(N-1)/F:0.5*(N-1)]; 
     IexFreqs = round(sort([IexcitedFrequenciesBase IexcitedFrequenciesNeg]')); % TODO: fix/remove round
 end
 rL = rH(1:F:end);
@@ -70,13 +68,13 @@ yH = simoutput.zeta;
 figure(2);clf;
 subplot(131)
 RH = fftshift(fft(rH))/sqrt(N);
-% RLH = fftshift(fft(rLH))/sqrt(N);
+RLH = fftshift(fft(rLH))/sqrt(N);
 RL = fftshift(fft(rL))/sqrt(NL);
 NUH = fftshift(fft(simoutput.nuph))/sqrt(N);
 YH = fftshift(fft(yH))/sqrt(N);
 stem(f,abs(RH)); hold on;
 stem(fL,abs(RL));
-% stem(f,abs(RLH));
+stem(f,abs(RLH));
 
 legend('sinusoid high freq','Downsampled sinusoid','Upsampled sinusoid')
 xline(fL(end))
@@ -108,7 +106,7 @@ set(gca,'yscale','log')
 set(gca,'xscale','log')
 %% LPM
 % [P_LPM,THz] = LPMOpenLoopPeriodicFastBLA(rH,yH,n,degLPM,(N-1)/F,(N-1)/F-1);
-P_LPM = MRLPMOpenLoopFastBLA(rH,yH,n,degLPM,IexFreqs);
+P_LPM = MRLPMOpenLoopFastBLA(rLH,yH,n,degLPM,IexFreqs);
 
 
 fh = linspace(0, 1 - 1/(floor(Nper/2)), (floor(Nper/2))) * (1/TsH)/2;   % available frequencies for high sampling rate
