@@ -59,7 +59,6 @@ end
 
 t = (0:TsH:(Ntot-1)*TsH)'; % time signal
 
-
 % custom multisine
 rH = repmat(rp,Per,1);
 

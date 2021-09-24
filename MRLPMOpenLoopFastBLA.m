@@ -37,16 +37,6 @@ Zk = [Yk;Uk];       % Pintelon 2012 (7-48)
 Nk = length(Ifreqs);
 thetaHat = zeros(Ny+Nu,R+1,Nk);
 for k = 1:Nk
-%     if k<nT+1                           % left border Pintelon2012 (7-29)
-%         p = nT-k+1;
-%         r=[-nT+p:-1+p 1+p:nT+p];        % freq bin leave out middle frequnecy Pintelon2012 (7-72)
-%     elseif k>Nn-nT                      % right border Pintelon2012 (7-29)
-%         p=-nT+Nn-k;
-%         r=[-nT+p:-1+p 1+p:nT+p];        % freq bin leave out middle frequnecy Pintelon2012 (7-72)
-%     else                                % everything else
-%         r = [-nT:-1 1:nT];              % freq bin leave out middle frequnecy Pintelon2012 (7-72)
-%     end
-      
     if k ==1
         r = [1:Ifreqs(k)-1 Ifreqs(k)+1:Ifreqs(k+1)-1]-Ifreqs(k);
     elseif k==Nk
@@ -55,10 +45,10 @@ for k = 1:Nk
         r = [Ifreqs(k-1)+1:Ifreqs(k)-1 Ifreqs(k)+1:Ifreqs(k+1)-1]-Ifreqs(k);
     end
     
-    nT =floor(length(r)/2);          % TODO floor/round/ceil??!
-    Kn = zeros((R+1),2*nT);          % reset Kn for every iteration k (+1??)
-    for i = 1:2*nT                   % freq bin leave out middle frequnecy Pintelon2012 (7-72)
-        Kn(:,i) = K1(r(i));          % Pintelon2012 between (7-71) and (7-72)
+    nT =length(r);                  % total window size for noise estimation (left+right size)
+    Kn = zeros((R+1),nT);           % reset Kn for every iteration k (+1??)
+    for i = 1:nT                    % freq bin leave out middle frequnecy Pintelon2012 (7-72)
+        Kn(:,i) = K1(r(i));         % Pintelon2012 between (7-71) and (7-72)
     end
     
     % scaling, see Pintelon2012 (7-25)
@@ -70,7 +60,7 @@ for k = 1:Nk
     Kn = Dscale\Kn;
     
     [U_k,S_k,V_k] = svd(Kn'); % better computational feasability Pintelon 2012 (7-24)
-    thetaHat(:,:,k) = Zf(:,Ifreqs(k)+r)*U_k/S_k'*V_k';
+    thetaHat(:,:,k) = Zf(:,Ifreqs(k)+r)*U_k/S_k'*V_k'; % use Zf, this is similar to arbitary excitation. 
     thetaHat(:,:,k) = thetaHat(:,:,k)/Dscale;
 end
 THz = squeeze(thetaHat(:,1,:));
