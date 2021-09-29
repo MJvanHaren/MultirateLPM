@@ -79,34 +79,43 @@ Zkh = Zf(:,exfI)-THz;
 Grz_LPM = zeros(2*Ny,Nu,Nn);
 G_LPM = zeros(Ny,Nu,Nn);
 Psi = zeros(Ny+Nu,R+1,Nn);
-for k = 1:Nn
-    if k<n+1 % left border Pintelon2012 (7-29)
-        p = n-k+1;
-        r=-n+p:n+p;
-    elseif k>Nn-n % right border Pintelon2012 (7-29)
-        p=-n+Nn-k;
-        r=-n+p:n+p;
-    else % everything else
-        r = -n:n;
+subBinIndices = find(diff(exfI)>P);
+
+for m = 1:length(subBinIndices)
+    if m==1
+        binLength = subBinIndices(m);
+    else
+         binLength = subBinIndices(m)-subBinIndices(m-1);
     end
-    L = zeros(Nu*(R+1),2*n+1); % reset Kn for every iteration k
-    for i = 1:2*n+1
-        L(:,i) = kron(K1(r(i)),Rk(:,k+r(i))); % yes?
+    for k = 1:binLength
+        if k<n+1 % left border Pintelon2012 (7-29)
+            p = n-k+1;
+            r=-n+p:n+p;
+        elseif k>binLength-n % right border Pintelon2012 (7-29)
+            p=-n+binLength-k;
+            r=-n+p:n+p;
+        else % everything else
+            r = -n:n;
+        end
+        L = zeros(Nu*(R+1),2*n+1); % reset Kn for every iteration k
+        for i = 1:2*n+1
+            L(:,i) = kron(K1(r(i)),Rk(:,subBinIndices(m)+k+r(i))); % yes?
+        end
+        
+        % scaling, see Pintelon2012 (7-25)
+        Dscale = zeros(Nu*(R+1));
+        for i = 1:Nu*(R+1)
+            Dscale(i,i) = norm(L(i,:),2);
+        end
+        
+        L = Dscale\L;
+        
+        [U_k,S_k,V_k] = svd(L'); % better computational feasability Pintelon 2012 (7-24)
+        Psi(:,:,subBinIndices(m)+k) = Zkh(:,subBinIndices(m)+k+r)*U_k/S_k'*V_k';
+        Psi(:,:,subBinIndices(m)+k) = Psi(:,:,subBinIndices(m)+k)/Dscale;
+        Grz_LPM(:,:,subBinIndices(m)+k) = Psi(:,1:Nu,subBinIndices(m)+k);% calculate LPM estimate of system
+        G_LPM(:,:,subBinIndices(m)+k) = Grz_LPM(1:Ny,:,subBinIndices(m)+k)/(Grz_LPM(end-Nu+1:end,:,subBinIndices(m)+k));
     end
-    
-    % scaling, see Pintelon2012 (7-25)
-    Dscale = zeros(Nu*(R+1));
-    for i = 1:Nu*(R+1)
-        Dscale(i,i) = norm(L(i,:),2);
-    end
-    
-    L = Dscale\L;
-    
-    [U_k,S_k,V_k] = svd(L'); % better computational feasability Pintelon 2012 (7-24)
-    Psi(:,:,k) = Zkh(:,k+r)*U_k/S_k'*V_k';
-    Psi(:,:,k) = Psi(:,:,k)/Dscale;
-    Grz_LPM(:,:,k) = Psi(:,1:Nu,k);% calculate LPM estimate of system
-    G_LPM(:,:,k) = Grz_LPM(1:Ny,:,k)/(Grz_LPM(end-Nu+1:end,:,k));
 end
 end
 
