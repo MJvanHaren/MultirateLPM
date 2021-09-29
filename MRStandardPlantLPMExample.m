@@ -20,7 +20,7 @@ fsL = fs/F; TsL = 1/fsL; % low sampling frequency and corresponding sampling tim
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
 
 % fSin = f(2:3:720); % input design TODO: check if f=0 can be incorporated (and f=fNyquistLow ?)
-exfIL = 25:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
+exfIL = 20:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
 fSin = f(exfIL); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 
 Nsin = length(fSin);    
@@ -95,14 +95,22 @@ set(gca,'xscale','log')
 exfIH = find(abs(RLH(1:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
 exffIH = find(abs(RLH(1:per:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
 Ptrue = bode(Pd,f*2*pi);
+Izoh = 0;
+z = tf('z',TsH);
+for fc=0:F-1
+    Izoh = Izoh+z^(-fc);
+end
+ZOHresp = abs(squeeze(freqresp(Izoh,(f(1):(f(2)-f(1))/per:fs-(f(2)-f(1))/per)*2*pi)));
 % [P_MRLPM_rH] = MRLPMClosedLoopFastBLA2(uH,yH,rH,n,degLPM,per,per-1,exfIH,F);
 % [P_MRLPM_rLH] = MRLPMClosedLoopFastBLA2(uH,yH,rLH,n,degLPM,per,per-1,exfIH,F);
 [P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,exfIH,F);
+[P_MRLPM_weighted] = MRLPMClosedLoopFastBLAWeighted(uH,yH,rLHZOH,n,degLPM,per,per-1,ZOHresp);
 figure(2); clf;
 semilogx(f,20*log10(squeeze(Ptrue))); hold on
 % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rH)))); 
 % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLH)))); 
 semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
+semilogx(f,20*log10(squeeze(abs(P_MRLPM_weighted))),'o'); 
 
 
 % P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
