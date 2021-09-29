@@ -20,7 +20,7 @@ fsL = fs/F; TsL = 1/fsL; % low sampling frequency and corresponding sampling tim
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
 
 % fSin = f(2:3:720); % input design TODO: check if f=0 can be incorporated (and f=fNyquistLow ?)
-exfIL = 10:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
+exfIL = 25:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
 fSin = f(exfIL); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 
 Nsin = length(fSin);    
@@ -105,7 +105,7 @@ figure(2); clf;
 semilogx(f,20*log10(squeeze(Ptrue))); hold on
 % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rH)))); 
 % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLH)))); 
-semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH)))); 
+semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
 
 
 P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);

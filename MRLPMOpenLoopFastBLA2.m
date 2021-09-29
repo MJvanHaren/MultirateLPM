@@ -79,13 +79,13 @@ Zkh = Zf(:,exfI)-THz;
 Grz_LPM = zeros(2*Ny,Nu,Nn);
 G_LPM = zeros(Ny,Nu,Nn);
 Psi = zeros(Ny+Nu,R+1,Nn);
-subBinIndices = find(diff(exfI)>P);
+subBinIndices = [0; find(diff(exfI)>P)];
 
 for m = 1:length(subBinIndices)
-    if m==1
-        binLength = subBinIndices(m);
+    if m == length(subBinIndices)
+        binLength = length(Rk)-subBinIndices(m);
     else
-         binLength = subBinIndices(m)-subBinIndices(m-1);
+        binLength = subBinIndices(m+1)-subBinIndices(m);
     end
     for k = 1:binLength
         if k<n+1 % left border Pintelon2012 (7-29)
