@@ -2,8 +2,9 @@ function [G_LPM] = MRLPMOpenLoopFastBLA(u,y,n,R,Ifreqs)
 % This script will calculate a local polynomial model for the given reference, in- and output of a MR system.
 % The system is assumed to be in open loop
 % Inputs:
-%     u : Input to (open loop) plant in time domain
-%     y : Output of plant to given input signal u
+%     u : Input to (open loop) plant in discrete time domain, high sampled
+%     y : Output of plant to given input signal u, high sampled
+%     F : Up- and downsampling factor
 %     n : Window size (left and right) for frequency bin k for model
 %     R : Degree of polynomial, e.g. G(omega_k+r) = G(omega)+sum_s=1^R g_s(k)*r^s
 %     Ifreqs : indices of excited frequencies
