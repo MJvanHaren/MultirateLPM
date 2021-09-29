@@ -1,4 +1,4 @@
-function [G_LPM] = MRLPMOpenLoopFastBLA2(u,y,r,n,R,P,nT,exfI,F)
+function [G_LPM] = MRLPMClosedLoopFastBLA2(u,y,r,n,R,P,nT,exfI,F)
 % This script will calculate a local polynomial model for the given reference, in- and output of a system.
 % The system is assumed to be in closed loop, see figure 7-4 Pintelon2012.
 % Inputs:

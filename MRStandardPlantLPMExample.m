@@ -95,12 +95,9 @@ set(gca,'xscale','log')
 exfIH = find(abs(RLH(1:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
 exffIH = find(abs(RLH(1:per:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
 Ptrue = bode(Pd,f*2*pi);
-[P_MRLPM_rH] = MRLPMOpenLoopFastBLA2(uH,yH,rH,n,degLPM,per,per-1,exfIH,F);
-[P_MRLPM_rLH] = MRLPMOpenLoopFastBLA2(uH,yH,rLH,n,degLPM,per,per-1,exfIH,F);
-[P_MRLPM_rLHZOH] = MRLPMOpenLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,exfIH,F);
-% Gry_LPM = MRLPMOpenLoopFastBLA(rLH,yH,n,degLPM,IexFreqs);
-% Gru_LPM = MRLPMOpenLoopFastBLA(rLH,uH,n,degLPM,IexFreqs);
-% P_MRLPM = squeeze(Gry_LPM)/squeeze(Gru_LPM);
+% [P_MRLPM_rH] = MRLPMClosedLoopFastBLA2(uH,yH,rH,n,degLPM,per,per-1,exfIH,F);
+% [P_MRLPM_rLH] = MRLPMClosedLoopFastBLA2(uH,yH,rLH,n,degLPM,per,per-1,exfIH,F);
+[P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,exfIH,F);
 figure(2); clf;
 semilogx(f,20*log10(squeeze(Ptrue))); hold on
 % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rH)))); 
@@ -108,11 +105,11 @@ semilogx(f,20*log10(squeeze(Ptrue))); hold on
 semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
 
 
-P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
-P_LPMrLH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLH,n,degLPM,per,per-1);
-P_LPMrLHZOH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLHZOH,n,degLPM,per,per-1);
-P_ETFE = abs(squeeze(etfe([yH rH],[],ETFEfreqSpacing).ResponseData))./abs(squeeze(etfe([uH rH],[],ETFEfreqSpacing).ResponseData));
-f_ETFE = etfe([yH rH],[],ETFEfreqSpacing).Frequency/pi*fs/2;
+% P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
+% P_LPMrLH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLH,n,degLPM,per,per-1);
+% P_LPMrLHZOH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLHZOH,n,degLPM,per,per-1);
+% P_ETFE = abs(squeeze(etfe([yH rH],[],ETFEfreqSpacing).ResponseData))./abs(squeeze(etfe([uH rH],[],ETFEfreqSpacing).ResponseData));
+% f_ETFE = etfe([yH rH],[],ETFEfreqSpacing).Frequency/pi*fs/2;
 
 % figure(3);clf;
 % semilogx(f,20*log10(squeeze(Ptrue))); hold on
