@@ -1,4 +1,4 @@
-function [G_LPM] = MRLPMClosedLoopFastBLA2(u,y,r,n,R,P,nT,exfI,F)
+function [G_LPM] = MRLPMClosedLoopFastBLA2(u,y,r,n,R,P,nT,exfI)
 % This script will calculate a local polynomial model for the given reference, in- and output of a system.
 % The system is assumed to be in closed loop, see figure 7-4 Pintelon2012.
 % Inputs:
@@ -10,7 +10,6 @@ function [G_LPM] = MRLPMClosedLoopFastBLA2(u,y,r,n,R,P,nT,exfI,F)
 %     P : number of periods in signal
 %     nT : window size for noise transient estimation
 %     exfI : indices of excited frequencies
-%     F : up- and downsampling factor
 % Outputs:
 %     G_LPM : Estimated plant dynamics
 %% errors
@@ -34,11 +33,6 @@ Yf=fft(y)/sqrt(N); % correct Pintelon2012 (7-66)
 Rf=fft(r)/sqrt(N); % correct Pintelon2012 (7-66)
 Zf = [Yf';Uf'];
 
-superBin = sort(unique(exfI+(-nT:nT)));
-
-% Yk = Yf(superBin,:)'; % up to nyquist frequency, ESSENTIAL
-% Uk = Uf(superBin,:)';
-% Zk = [Yk;Uk];       % Pintelon 2012 (7-48)
 Rk = Rf(exfI,:)';
 %% suppress noise transient contribution
 thetaHat = zeros(Ny+Nu,R+1,Nn);

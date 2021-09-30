@@ -2,7 +2,7 @@ clear all; close all; clc;
 addpath('../LPM/')
 %% complex sinusoid
 n=8;            % window size
-degLPM = 2;     % degree of polynomial estimator
+degLPM = 1;     % degree of polynomial estimator
 j = sqrt(-1);
 fs = 250; TsH = 1/fs;
 tp = (0:TsH:10-TsH)';
@@ -20,7 +20,7 @@ fsL = fs/F; TsL = 1/fsL; % low sampling frequency and corresponding sampling tim
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
 
 % fSin = f(2:3:720); % input design TODO: check if f=0 can be incorporated (and f=fNyquistLow ?)
-exfIL = 20:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
+exfIL = 1:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
 fSin = f(exfIL); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 
 Nsin = length(fSin);    
@@ -100,18 +100,23 @@ z = tf('z',TsH);
 for fc=0:F-1
     Izoh = Izoh+z^(-fc);
 end
-ZOHresp = abs(squeeze(freqresp(Izoh,(f(1):(f(2)-f(1))/per:fs-(f(2)-f(1))/per)*2*pi)));
-% [P_MRLPM_rH] = MRLPMClosedLoopFastBLA2(uH,yH,rH,n,degLPM,per,per-1,exfIH,F);
-% [P_MRLPM_rLH] = MRLPMClosedLoopFastBLA2(uH,yH,rLH,n,degLPM,per,per-1,exfIH,F);
-[P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,exfIH,F);
-[P_MRLPM_weighted] = MRLPMClosedLoopFastBLAWeighted(uH,yH,rLHZOH,n,degLPM,per,per-1,ZOHresp);
+ZOHrespW = abs(squeeze(freqresp(Izoh,(f(1):(f(2)-f(1))/per:fs-(f(2)-f(1))/per)*2*pi)));
+ZOHresp = abs(squeeze(freqresp(Izoh,f*2*pi)));
+ZOHThreshold = db2mag(-10);
+exfIZOH = find(ZOHresp>ZOHThreshold);
+[P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,(exfIZOH-1)*per+1);
+% [P_MRLPM_weighted] = MRLPMClosedLoopFastBLAWeighted(uH,yH,rLHZOH,n,degLPM,per,per-1,ZOHrespW);
 figure(2); clf;
 semilogx(f,20*log10(squeeze(Ptrue))); hold on
-% semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rH)))); 
-% semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLH)))); 
-semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
-semilogx(f,20*log10(squeeze(abs(P_MRLPM_weighted))),'o'); 
+semilogx(f(exfIZOH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
+% semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
+% semilogx(f,20*log10(squeeze(abs(P_MRLPM_weighted))),'o'); 
+semilogx(f,20*log10(squeeze(abs(ZOHresp))),':'); 
+xline(fL(end),':','Nyquist Low')
+yline(mag2db(ZOHThreshold),'--')
+axis([2e-1 f(end) -60 60])
 
+%% random/old
 
 % P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
 % P_LPMrLH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLH,n,degLPM,per,per-1);
