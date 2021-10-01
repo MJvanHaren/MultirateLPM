@@ -1,8 +1,8 @@
 clear all; close all; clc;
 addpath('../LPM/')
 %% complex sinusoid
-n=8;            % window size
-degLPM = 1;     % degree of polynomial estimator
+n=3;            % window size
+degLPM = 2;     % degree of polynomial estimator
 j = sqrt(-1);
 fs = 250; TsH = 1/fs;
 tp = (0:TsH:10-TsH)';
@@ -12,12 +12,15 @@ t = (0:TsH:per*(tp(end)+TsH)-TsH)';
 N = length(t);
 
 Nnyquist = floor(Np/2);
-f = linspace(0, 1 - 1/Nnyquist, Nnyquist) * (1/TsH)/2; % TODO what about zhe negative frequencies? (is in some sense taken into account, see line 46-47)
+f = linspace(0, 1 - 1/Nnyquist, Nnyquist) * (1/TsH)/2; % TODO what about nyquist?
+
 fRes = (f(end)-f(end-1)); % resolution of freq. grid
 
 F = 10; % down- and upsampling factor
 fsL = fs/F; TsL = 1/fsL; % low sampling frequency and corresponding sampling time.
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
+% fL = f(1:(length(f)-1)/F+1);
+NnL = length(fL);
 
 % fSin = f(2:3:720); % input design TODO: check if f=0 can be incorporated (and f=fNyquistLow ?)
 exfIL = 1:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
@@ -52,6 +55,7 @@ J = [   0  0 0 1;
         0  0 0 1;
         -1 1 -1 0];
 Gd = lft(Pd,J);
+LiftSys = liftfrd(Pd,F,f);
 %% downsampling
 idx = find(fSin>=fsL/2);
 
@@ -63,11 +67,22 @@ rL = rH(1:F:end);
 NL = length(rL);
 rLHZOH = repelem(rL,F);
 rLH = reshape([rL'; zeros(F-1,length(rL))],1,[])';
+
 %% simulate
 simoutput = sim('MRStandardSimulation');
 yH = simoutput.zeta(:,1);
 uH = simoutput.zeta(:,2);
+uL = uH(1:F:end);
 nH = simoutput.omegah(:,2);
+%% lifting of signals
+yLifted = zeros(N/F,F);
+rLifted = zeros(N/F,F);
+uLifted = zeros(N/F,F);
+for i=1:N/F
+    yLifted(i,:) = yH((i-1)*F+1:i*F);
+    uLifted(i,:) = uH((i-1)*F+1:i*F);
+    rLifted(i,:) = rH((i-1)*F+1:i*F);
+end
 %% DFT and plotting
 figure(1);clf;
 subplot(121)
@@ -78,7 +93,7 @@ RL = fft(rL)/sqrt(NL);
 NUH = fft(simoutput.nuph)/sqrt(N);
 YH = fft(yH)/sqrt(N);
 stem(f,abs(RH(1:per:per*Nnyquist))); hold on;
-stem(fL,abs(RL(1:per:per*Nnyquist/F)));
+stem(fL,abs(RL(1:per:NnL*per)));
 stem(f,abs(RLHZOH(1:per:per*Nnyquist)));
 stem(f,abs(RLH(1:per:per*Nnyquist)));
 legend('sinusoid high freq','Downsampled sinusoid','Down+Upsampled+ZOH sinusoid','Down+Upsampled sinusoid')
@@ -92,52 +107,59 @@ legend('output of system with natural frequency at 0.8Hz')
 set(gca,'yscale','log')
 set(gca,'xscale','log')
 %% LPM
-exfIH = find(abs(RLH(1:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
-exffIH = find(abs(RLH(1:per:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
-Ptrue = bode(Pd,f*2*pi);
-Izoh = 0;
-z = tf('z',TsH);
-for fc=0:F-1
-    Izoh = Izoh+z^(-fc);
-end
-ZOHrespW = abs(squeeze(freqresp(Izoh,(f(1):(f(2)-f(1))/per:fs-(f(2)-f(1))/per)*2*pi)));
-ZOHresp = abs(squeeze(freqresp(Izoh,f*2*pi)));
-ZOHThreshold = db2mag(-10);
-exfIZOH = find(ZOHresp>ZOHThreshold);
-[P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,(exfIZOH-1)*per+1);
-% [P_MRLPM_weighted] = MRLPMClosedLoopFastBLAWeighted(uH,yH,rLHZOH,n,degLPM,per,per-1,ZOHrespW);
-figure(2); clf;
-semilogx(f,20*log10(squeeze(Ptrue))); hold on
-semilogx(f(exfIZOH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
-% semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
-% semilogx(f,20*log10(squeeze(abs(P_MRLPM_weighted))),'o'); 
-semilogx(f,20*log10(squeeze(abs(ZOHresp))),':'); 
-xline(fL(end),':','Nyquist Low')
-yline(mag2db(ZOHThreshold),'--')
-axis([2e-1 f(end) -60 60])
-
-%% random/old
-
-% P_LPMrH = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
-% P_LPMrLH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLH,n,degLPM,per,per-1);
-% P_LPMrLHZOH = LPMClosedLoopPeriodicFastBLA(uH,yH,rLHZOH,n,degLPM,per,per-1);
-% P_ETFE = abs(squeeze(etfe([yH rH],[],ETFEfreqSpacing).ResponseData))./abs(squeeze(etfe([uH rH],[],ETFEfreqSpacing).ResponseData));
-% f_ETFE = etfe([yH rH],[],ETFEfreqSpacing).Frequency/pi*fs/2;
-
-% figure(3);clf;
+% exfIH = find(abs(RLH(1:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
+% exffIH = find(abs(RLH(1:per:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
+% Ptrue = bode(Pd,f*2*pi);
+% Izoh = 0;
+% z = tf('z',TsH);
+% for fc=0:F-1
+%     Izoh = Izoh+z^(-fc);
+% end
+% ZOHrespW = abs(squeeze(freqresp(Izoh,(f(1):(f(2)-f(1))/per:fs-(f(2)-f(1))/per)*2*pi)));
+% ZOHresp = abs(squeeze(freqresp(Izoh,f*2*pi)));
+% ZOHThreshold = db2mag(-10);
+% exfIZOH = find(ZOHresp>ZOHThreshold);
+% [P_MRLPM_rLHZOH] = MRLPMClosedLoopFastBLA2(uH,yH,rLHZOH,n,degLPM,per,per-1,(exfIZOH-1)*per+1);
+% % [P_MRLPM_weighted] = MRLPMClosedLoopFastBLAWeighted(uH,yH,rLHZOH,n,degLPM,per,per-1,ZOHrespW);
+% figure(2); clf;
 % semilogx(f,20*log10(squeeze(Ptrue))); hold on
-% semilogx(f,20*log10(abs(squeeze(P_LPMrH))));
-% semilogx(f,20*log10(abs(squeeze(P_LPMrLH))));
-% semilogx(f,20*log10(abs(squeeze(P_LPMrLHZOH))));
-% semilogx(f_ETFE,20*log10(abs(squeeze(P_ETFE))));
-% legend('True plant','LPM with rH','LPM with rLH','LPM with rLHZOH','ETFE')
+% semilogx(f(exfIZOH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
+% % semilogx(f(exffIH),20*log10(squeeze(abs(P_MRLPM_rLHZOH))),'o'); 
+% % semilogx(f,20*log10(squeeze(abs(P_MRLPM_weighted))),'o'); 
+% semilogx(f,20*log10(squeeze(abs(ZOHresp))),':'); 
+% xline(fL(end),':','Nyquist Low')
+% yline(mag2db(ZOHThreshold),'--')
+% axis([2e-1 f(end) -60 60])
+%% lifted LPM
+[PLiftedLPM] = LPMClosedLoopPeriodicFastBLA(uL,yLifted,rL,n,degLPM,per,per-1); % TODO: take rH or rLifted instead of rL?
+Ptrue = bode(Pd,f*2*pi);
+PLiftedLPM = squeeze(PLiftedLPM)';
+figure(3);clf;
+for i = 1:F
+        subplot(F,1,i)
+        semilogx(fL,20*log10(abs(PLiftedLPM(1:end,i)))); hold on;
+%         semilogx(f,20*log10(squeeze(Ptrue)));
+        semilogx(fL,20*log10(squeeze(abs(LiftSys(i,1).ResponseData(1:end-1)))));
+end
 
-% figure(4);clf
-% semilogx(f,20*log10(abs(abs(squeeze(P_LPMrH))-abs(squeeze(Ptrue)))));hold on;
-% semilogx(f,20*log10(abs(abs(squeeze(P_LPMrLH))-abs(squeeze(Ptrue)))));
-% semilogx(f,20*log10(abs(abs(squeeze(P_LPMrLHZOH))-abs(squeeze(Ptrue)))));
-% legend('LPM with rH','LPM with rLH','LPM with rLHZOH')
-%%
+% unlift
+opts = bodeoptions;
+opts.FreqUnits = 'Hz';
+Glift = [];
+for i = 1:F
+%     Glift = [frd(PLiftedLPM(:,1),fL,TsH/F,'FrequencyUnit','Hz');frd(PLiftedLPM(:,2),fL,TsH/F,'FrequencyUnit','Hz')]; % TODO change for F= any value
+    Glift = [Glift;frd(PLiftedLPM(:,i),fL,TsH/F,'FrequencyUnit','Hz')]; 
+end
+% Gori_frd = unliftfrd(Glift,F,f,fL);
+temp = frd(LiftSys(:,1).ResponseData(:,:,1:end),[fL fs/2/F],TsL);
+Gori_frd = unliftfrd(temp,F,[f fs/2],[fL fs/2/F]);
+
+
+figure(4);clf
+bode(Gori_frd,'o'); hold on;
+bode(Pd,f*2*pi,opts);
+xline([fs/F fs/F/2],':')
+%% functions
 function [AI, BI] = CommonElemTol(A, B, Tol)
    A  = A(:);
    B  = B(:);
