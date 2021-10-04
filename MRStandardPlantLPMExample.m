@@ -2,12 +2,12 @@ clear all; close all; clc;
 addpath('../LPM/')
 %% complex sinusoid
 n=3;            % window size
-degLPM = 2;     % degree of polynomial estimator
+degLPM = 1;     % degree of polynomial estimator
 j = sqrt(-1);
 fs = 250; TsH = 1/fs;
 tp = (0:TsH:10-TsH)';
 Np = length(tp);
-per = 6;
+per = 4;
 t = (0:TsH:per*(tp(end)+TsH)-TsH)';
 N = length(t);
 
@@ -16,13 +16,11 @@ f = linspace(0, 1 - 1/Nnyquist, Nnyquist) * (1/TsH)/2; % TODO what about nyquist
 
 fRes = (f(end)-f(end-1)); % resolution of freq. grid
 
-F = 10; % down- and upsampling factor
+F = 2; % down- and upsampling factor
 fsL = fs/F; TsL = 1/fsL; % low sampling frequency and corresponding sampling time.
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
-% fL = f(1:(length(f)-1)/F+1);
 NnL = length(fL);
 
-% fSin = f(2:3:720); % input design TODO: check if f=0 can be incorporated (and f=fNyquistLow ?)
 exfIL = 1:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
 fSin = f(exfIL); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 
@@ -37,31 +35,25 @@ rH = repmat(rH,per,1);
 ETFEfreqSpacing =750;
 %% system
 s = tf('s');
-% m = 1;
-% c = 0.5;
-% k = 250;
-% P = 1/(m*s^2+c*s+k);
-% Pd = c2d(P,TsH);
 
 P = 5.6e3*(0.9*s^2+2*s+5.4e4)/(1.1*0.9*s^4+(1.1+0.9)*2*s^3+(1.1+0.9)*5.4e4*s^2);
 K = 0.01*(1/(0.3*2*pi)*s+1)/(1/(3*2*pi)*s+1);
-Pd = c2d(P,TsH);
+
+% P = 1/(s^2+10*s+100);
+
+Pd = c2d(P,TsH,'zoh');
 Kd = c2d(K,TsL);
 
-% J = [0 0 1;1 0 0;-1 1 0];
-% J = [0 0 1;1 0 0;0 0 1;-1 1 0];
+
 J = [   0  0 0 1;
         1  0 1 0;
         0  0 0 1;
         -1 1 -1 0];
 Gd = lft(Pd,J);
+
 LiftSys = liftfrd(Pd,F,f);
 %% downsampling
 idx = find(fSin>=fsL/2);
-
-% if length(unique(f(exfI)))<length(f(exfI))
-%     error('duplicate frequency entered'); % TODO: FIX, not doing anything now?
-% end
 
 rL = rH(1:F:end);
 NL = length(rL);
@@ -106,6 +98,33 @@ xline(fL(end))
 legend('output of system with natural frequency at 0.8Hz')
 set(gca,'yscale','log')
 set(gca,'xscale','log')
+
+%% lifted LPM
+[PLiftedLPM] = LPMClosedLoopPeriodicFastBLA(uL,yLifted,rL,n,degLPM,per,per-1); % TODO: take rH or rLifted instead of rL?
+% yrdata = iddata(yLifted,rLifted,TsL);
+% urdata = iddata(uL,rL,TsL);
+% PLiftedETFE = etfe(yrdata,[],250)/etfe(urdata,[],250);
+% PLiftedETFE = PLiftedETFE.ResponseData;
+Ptrue = bode(Pd,f*2*pi);
+PLiftedLPM = squeeze(PLiftedLPM)';
+figure(3);clf;
+for i = 1:F
+        subplot(F,1,i)
+        semilogx(fL,20*log10(abs(PLiftedLPM(1:end-1,i)))); hold on;
+%         semilogx(fL,20*log10(abs(squeeze(PLiftedETFE(i,:,:)))));
+        semilogx(fL,20*log10(squeeze(abs(LiftSys(i,1).ResponseData(1:end-1)))));
+end
+legend('LPM Lifted system','Wataru lifted system')
+
+temp = frd(LiftSys(:,1).ResponseData(:,:,1:end),[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+Gori_frd = unliftfrd(temp,F,[f fs/2],[fL fs/2/F]);
+
+opts = bodeoptions;
+opts.FreqUnits = 'Hz';
+figure(4);clf
+bode(Gori_frd,'o'); hold on;
+bode(Pd,f*2*pi,opts);
+xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
 %% LPM
 % exfIH = find(abs(RLH(1:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
 % exffIH = find(abs(RLH(1:per:per*Nnyquist))>1e-10); % TODO: change 1e-6 to variable
@@ -130,35 +149,7 @@ set(gca,'xscale','log')
 % xline(fL(end),':','Nyquist Low')
 % yline(mag2db(ZOHThreshold),'--')
 % axis([2e-1 f(end) -60 60])
-%% lifted LPM
-[PLiftedLPM] = LPMClosedLoopPeriodicFastBLA(uL,yLifted,rL,n,degLPM,per,per-1); % TODO: take rH or rLifted instead of rL?
-Ptrue = bode(Pd,f*2*pi);
-PLiftedLPM = squeeze(PLiftedLPM)';
-figure(3);clf;
-for i = 1:F
-        subplot(F,1,i)
-        semilogx(fL,20*log10(abs(PLiftedLPM(1:end,i)))); hold on;
-%         semilogx(f,20*log10(squeeze(Ptrue)));
-        semilogx(fL,20*log10(squeeze(abs(LiftSys(i,1).ResponseData(1:end-1)))));
-end
 
-% unlift
-opts = bodeoptions;
-opts.FreqUnits = 'Hz';
-Glift = [];
-for i = 1:F
-%     Glift = [frd(PLiftedLPM(:,1),fL,TsH/F,'FrequencyUnit','Hz');frd(PLiftedLPM(:,2),fL,TsH/F,'FrequencyUnit','Hz')]; % TODO change for F= any value
-    Glift = [Glift;frd(PLiftedLPM(:,i),fL,TsH/F,'FrequencyUnit','Hz')]; 
-end
-% Gori_frd = unliftfrd(Glift,F,f,fL);
-temp = frd(LiftSys(:,1).ResponseData(:,:,1:end),[fL fs/2/F],TsL);
-Gori_frd = unliftfrd(temp,F,[f fs/2],[fL fs/2/F]);
-
-
-figure(4);clf
-bode(Gori_frd,'o'); hold on;
-bode(Pd,f*2*pi,opts);
-xline([fs/F fs/F/2],':')
 %% functions
 function [AI, BI] = CommonElemTol(A, B, Tol)
    A  = A(:);

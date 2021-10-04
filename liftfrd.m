@@ -60,8 +60,7 @@ if flag_frd % input is frd
     
     % freqresp for over nyquist
     resp = squeeze(G.resp);
-    resp2 = [resp;real(flipud(resp(1:end-1)))-1j*imag(flipud(resp(1:end-1)));resp(2:end)];
-%     resp3= [resp;conj(flipud(resp(1:end-1)));resp(2:end)]; % equivalent to resp2
+    resp2= [resp;conj(flipud(resp(1:end-1)));resp(2:end)];
     freq2 = [freq;freq(2:end)+freq(end);freq(2:end)+2*freq(end)];
     
     kk_fn = length(freq)-1; % number of samples up to Nyquist freq
