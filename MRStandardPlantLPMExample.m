@@ -1,49 +1,41 @@
 clear all; close all; clc;
 addpath('../LPM/')
 addpath('../local methods/LPM-LRM/')
-%% complex sinusoid
-n = 3;            % window size
-degLPM = 2;       % degree of polynomial estimator
-F = 5;            % down- and upsampling factor
-j = sqrt(-1);
-fs = 250; TsH = 1/fs;
-Tend = 20-TsH;
+%% inputs
+n = 3;                  % window size
+degLPM = 2;             % degree of polynomial estimator
+F = 5;                  % down- and upsampling factor
+per = 4;                % amunt of periods in signal r(k)
+fs = 250; TsH = 1/fs;   % high/base sampling frequency
+Tend = 20-TsH;          % time of simulation
+%% definitions
 tp = (0:TsH:Tend)';
-
 Np = length(tp);
 Nnyquist = floor(Np/2);
 f = linspace(0, 1 - 1/Nnyquist, Nnyquist) * (1/TsH)/2;  % TODO what about nyquist?
 fsL = fs/F; TsL = 1/fsL;                                % low sampling frequency and corresponding sampling time.
 fL = linspace(0, 1 - 1/(Nnyquist/F), Nnyquist/F) * (1/TsL)/2;
 NnL = length(fL);
-per = 4;
 t = (0:TsH:per*(tp(end)+TsH)-TsH)';
-tLift = repmat((0:TsL:Tend)',1,F);
-
+tL = (0:TsL:Tend)';
 N = length(t);
-fRes = (f(end)-f(end-1)); % resolution of freq. grid
 
-exfIL = 1:1:CommonElemTol(f, fsL/2, fRes/10); % input frequencies on low input spectrum
-fSin = f(exfIL); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
+fSin = f(1:(length(f)/F+1)); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 fSinMulti = reshape(fSin(1:end-1),F,[])';
-% fSinMulti = repmat(fSin',1,F);
+Nsin = size(fSinMulti,1);   
 
-Nsin = length(fSinMulti);    
-rH = zeros(Np,1);
-rLift = zeros(size(tLift));
+rLift = zeros(length(tL),F);
 for k = 1:Nsin
 %     rH = rH+exp(j*omegaSin(i)*tper); %complex sinus
 %     rH = rH+sin(2*pi*fSin(k)*tp+rand*2*pi); % real sinus
-    rLift = rLift+sin(2*pi*tLift(:,1)*fSinMulti(k,:)+rand(1,F)*2*pi);
+    rLift = rLift+sin(2*pi*tL*fSinMulti(k,:)+rand(1,F)*2*pi);
 end
-rH = repmat(rH,per,1);
 rLift = repmat(rLift,per,1);
 rUnLift=[];
 for i=1:N/F
     rUnLift = [rUnLift; rLift(i,:)'];
 end
 rH = rUnLift;
-ETFEfreqSpacing =750;
 %% system
 s = tf('s');
 P = 5.6e3*(0.9*s^2+2*s+5.4e4)/(1.1*0.9*s^4+(1.1+0.9)*2*s^3+(1.1+0.9)*5.4e4*s^2);
@@ -85,15 +77,13 @@ for i = 1:F
     end
 end
 
-
 % 3: ETFE estimate
 iddataPS = iddata(yLifted,rLifted,TsL);
 iddataS = iddata(uLifted,rLifted,TsL);
 PETFE = etfe(iddataPS,10,Np)/etfe(iddataS,10,Np);
 %% unlift using Brittani2009 (6.10)
-In = 501;
-j = sqrt(-1);
-% LiftSys.ResponseData(:,:,1:In) = LiftSys.ResponseData(:,:,1:In) - repmat(reshape(logspace(2,-4,In),1,1,[]),F,F,1).*randn(F,F,In)-repmat(reshape(logspace(2,-4,In),1,1,[]),F,F,1).*randn(F,F,In)*j ; % disturb original Lifted system
+In = 10;
+LiftSys.ResponseData(:,:,1:In) = LiftSys.ResponseData(:,:,1:In) - repmat(reshape(logspace(4,0,In),1,1,[]),F,F,1).*randn(F,F,In); % disturb original Lifted system
 Gori_frd0 = unliftfrd(LiftSys(:,1),F,[f fs/2],[fL fs/2/F]); % system lifted and then unlifted
 Gori_frd1 = frd(PLiftedLPM1,[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
 Gori_frd2 = unliftfrd(frd2(:,1),F,[f fs/2],[fL fs/2/F]); % equal to solution 3
@@ -112,31 +102,7 @@ xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
 % check plant difference
 difOutput = yH-lsim(Pd,uH);
 if (any(abs(difOutput) > 1e-5)), error('Difference in simulink and lsim'); end
-%% functions
-function [AI, BI] = CommonElemTol(A, B, Tol)
-   A  = A(:);
-   B  = B(:);
-   nA = numel(A);
-   M  = zeros(1, nA);
-   
-   % Collect the index of the first occurrence in B for every A:
-   for iA = 1:nA
-      dist = abs(A(iA) - B);             % EDITED: Of course abs() is needed
-      Ind  = find(dist < Tol, 1);        % Absolute tolerance
-      % Ind = find(dist ./ A(iA) < Tol, 1);  % Relative tolerance
-      
-      if ~isempty(Ind)
-         M(iA) = Ind;
-      end
-   end
-   AI = find(M);        % If any occurrence was found, this A exists
-   if isempty(AI)       % prevent: Empty matrix: 0-by-1
-      AI = [];
-   end
-   BI = M(AI);          % at this index in B
-end
-
-%% DFT and plotting
+%% OLD: DFT and plotting
 % figure(1);clf;
 % subplot(121)
 % RH = fft(rH)/sqrt(N);
