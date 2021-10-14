@@ -3,10 +3,10 @@ addpath('../LPM/')
 addpath('../local methods/LPM-LRM/')
 %% inputs
 n = 8;                  % window size
-degLPM = 3;             % degree of polynomial estimator
+degLPM = 5;             % degree of polynomial estimator
 F = 5;                  % down- and upsampling factor
 per = 10;                % amunt of periods in signal r(k)
-perSkip = 5;            % amount of (first) periods to remove from data 
+perSkip = 2;            % amount of (first) periods to remove from data 
 fs = 250; TsH = 1/fs;   % high/base sampling frequency
 Tend = 20-TsH;          % time of simulation
 %% definitions
@@ -22,8 +22,8 @@ tL = (0:TsL:Tend)';
 N = length(t);
 
 fSin = f(1:(length(f)/F+1)); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
-% fSinMulti = reshape(fSin(1:end-1),F,[])';
-fSinMulti = repmat(fSin',F,1);
+fSinMulti = reshape(fSin(1:end-1),F,[])'; % uncorrelated inputs
+% fSinMulti = repmat(fSin',F,1); % correlated inputs
 Nsin = size(fSinMulti,1);   
 
 rLift = zeros(length(tL),F);
@@ -46,7 +46,14 @@ K = 0.01*(1/(0.3*2*pi)*s+1)/(1/(3*2*pi)*s+1);
 Pd = c2d(P,TsH,'zoh');
 Kd = c2d(K,TsL,'zoh');
 
-LiftSys = liftfrd(Pd ,F,f);
+J = [0 1 1; % r as disturbance at high rate
+    1 0 0;
+    0 1 1;
+    -1 0 0];
+Gd = lft(Pd,J);
+
+
+LiftPd = liftfrd(Pd ,F,f);
 %% downsampling
 rL = rH(1:F:end);
 NL = length(rL);
@@ -79,26 +86,41 @@ for i = 1:F
     end
 end
 
-% 3: ETFE estimate
-iddataPS = iddata(yLifted,rLifted,TsL);
-iddataS = iddata(uLifted,rLifted,TsL);
-PETFE = etfe(iddataPS,10,Np)/etfe(iddataS,10,Np);
+% 3: regular solution: ETFE estimate
+PETFE = etfe([yH rH],256,Np)/etfe([uH rH],256,Np);
+PETFE.FrequencyUnit = 'Hz';
+PETFE.Frequency = PETFE.Frequency/pi*fs/2;
+
+% 5: double unlift on rLift-> yLift and rLift-> uLift
+PLiftedLPMN1 = LPMOpenLoopPeriodicFastBLA(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip);
+PLiftedLPMN2 = LPMOpenLoopPeriodicFastBLA(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip);
+for i = 1:F
+    for ii=1:F
+        frd41(i,ii) = frd(squeeze(PLiftedLPMN1(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+        frd42(i,ii) = frd(squeeze(PLiftedLPMN2(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+    end
+end
 %% unlift using Brittani2009 (6.10)
 In = 10;
-LiftSys.ResponseData(:,:,1:In) = LiftSys.ResponseData(:,:,1:In) - repmat(reshape(logspace(4,0,In),1,1,[]),F,F,1).*randn(F,F,In); % disturb original Lifted system
-Gori_frd0 = unliftfrd(LiftSys(:,1),F,[f fs/2],[fL fs/2/F]); % system lifted and then unlifted
-Gori_frd1 = frd(PLiftedLPM1,[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
-Gori_frd2 = unliftfrd(frd2(:,1),F,[f fs/2],[fL fs/2/F]); % equal to solution 3
-%% plotting
+LiftPd.ResponseData(:,:,1:In) = LiftPd.ResponseData(:,:,1:In) - repmat(reshape(logspace(4,0,In),1,1,[]),F,F,1).*randn(F,F,In); % disturb original Lifted system
+Gori_frd0 = unliftfrd(LiftPd(:,1),F,[f fs/2],[fL fs/2/F]); % system lifted and then unlifted
+Gori_frd1 = frd(squeeze(PLiftedLPM1)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
+Gori_frd2 = unliftfrd(frd2(:,1),F,[f fs/2],[fL fs/2/F]);
+Gori_frd4 = unliftfrd(frd41(:,1),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,1),F,[f fs/2],[fL fs/2/F]); 
+%% plotting of estimated P_H
 opts = bodeoptions;
 opts.FreqUnits = 'Hz';
 
-figure(2);clf
+figure(1);clf
 bode(Pd,[f fs/2]*2*pi,opts); hold on;
 bode(Gori_frd0,'o'); hold on;
 bode(Gori_frd1,'y^'); hold on;
 bode(Gori_frd2,'md'); hold on;
+bode(PETFE,'rx'); hold on;
+bode(Gori_frd4,'k+'); hold on;
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
+%% PFG calucation
+
 %% OLD: DFT and plotting
 % figure(1);clf;
 % subplot(121)
@@ -126,12 +148,9 @@ xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
 % zeta_h = [y_h; u_h] = [psi_p,h; either nu_h or nu_h+omega_h]
 % psi_h = either r_h-y_h or -y_h = either omega_h-psi_p,h or -psi_p,h
 
-% J = [0 1 1; % r as disturbance at high rate
-%     1 0 0;
-%     0 1 1;
-%     -1 0 0];
+
 % J = [0  0 1; % r as reference
 %      1  0 0;
 %      0  0 1;
 %      -1 1 0];
-% Gd = lft(Pd,J);
+% 
