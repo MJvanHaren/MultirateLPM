@@ -2,10 +2,11 @@ clear all; close all; clc;
 addpath('../LPM/')
 addpath('../local methods/LPM-LRM/')
 %% inputs
-n = 3;                  % window size
-degLPM = 2;             % degree of polynomial estimator
+n = 8;                  % window size
+degLPM = 3;             % degree of polynomial estimator
 F = 5;                  % down- and upsampling factor
-per = 4;                % amunt of periods in signal r(k)
+per = 10;                % amunt of periods in signal r(k)
+perSkip = 5;            % amount of (first) periods to remove from data 
 fs = 250; TsH = 1/fs;   % high/base sampling frequency
 Tend = 20-TsH;          % time of simulation
 %% definitions
@@ -21,7 +22,8 @@ tL = (0:TsL:Tend)';
 N = length(t);
 
 fSin = f(1:(length(f)/F+1)); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
-fSinMulti = reshape(fSin(1:end-1),F,[])';
+% fSinMulti = reshape(fSin(1:end-1),F,[])';
+fSinMulti = repmat(fSin',F,1);
 Nsin = size(fSinMulti,1);   
 
 rLift = zeros(length(tL),F);
@@ -55,22 +57,22 @@ yH = simoutput.zeta(:,1);
 uH = simoutput.zeta(:,2);
 uL = uH(1:F:end);
 %% lifting of signals
-yLifted = zeros(N/F,F);
-uLifted = zeros(N/F,F);
-rLifted = zeros(N/F,F);
+yLifted = zeros(N/F-N/F/per*perSkip,F);
+uLifted = zeros(N/F-N/F/per*perSkip,F);
+rLifted = zeros(N/F-N/F/per*perSkip,F);
 
-for i=1:N/F
-    yLifted(i,:) = yH((i-1)*F+1:i*F);
-    uLifted(i,:) = uH((i-1)*F+1:i*F);
-    rLifted(i,:) = rH((i-1)*F+1:i*F);
+for i=N/F/per*perSkip+1:N/F
+    yLifted(i-N/F/per*perSkip,:) = yH((i-1)*F+1:i*F);
+    uLifted(i-N/F/per*perSkip,:) = uH((i-1)*F+1:i*F);
+    rLifted(i-N/F/per*perSkip,:) = rH((i-1)*F+1:i*F);
 end
 %% lifted LPM
 % 1: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
-PLiftedLPM1 = LPMClosedLoopPeriodicFastBLA(uH,yH,rH,n,degLPM,per,per-1);
+PLiftedLPM1 = LPMClosedLoopPeriodicFastBLA(uH(1+N/per*perSkip:end),yH(1+N/per*perSkip:end),rH(1+N/per*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
 
 % 2: closed loop lifted standard. Results good approximation of lifted
 % system, but not so good for unlifted
-PLiftedLPM2 = LPMClosedLoopPeriodicFastBLA(uLifted,yLifted,rLifted,n,degLPM,per,per-1);
+PLiftedLPM2 = LPMClosedLoopPeriodicFastBLA(uLifted,yLifted,rLifted,n,degLPM,per-perSkip,per-1-perSkip);
 for i = 1:F
     for ii=1:F
         frd2(i,ii) = frd(squeeze(PLiftedLPM2(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz'); % create frd model of response data
@@ -97,11 +99,6 @@ bode(Gori_frd0,'o'); hold on;
 bode(Gori_frd1,'y^'); hold on;
 bode(Gori_frd2,'md'); hold on;
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
-
-%% check simulink vs matlab
-% check plant difference
-difOutput = yH-lsim(Pd,uH);
-if (any(abs(difOutput) > 1e-5)), error('Difference in simulink and lsim'); end
 %% OLD: DFT and plotting
 % figure(1);clf;
 % subplot(121)
