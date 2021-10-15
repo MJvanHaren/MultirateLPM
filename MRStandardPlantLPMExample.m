@@ -105,9 +105,17 @@ Gori_frd2 = frd(squeeze(PLiftedLPM2)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does
 Gori_frd4 = unliftfrd(frd41(:,4),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,5),F,[f fs/2],[fL fs/2/F]); 
 Gori_frd5 = frd(zeros(1,1,length(f)+1),[f fs/2],'FrequencyUnit','Hz');
 
-for k = 1:F
-    tempFRD = unliftfrd(frd41(:,k),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,k),F,[f fs/2],[fL fs/2/F]); 
-    Gori_frd5.ResponseData(1,1,k:F:length(f)+1) = tempFRD.ResponseData(1,1,k:F:end);
+table = [1 F:-1:2];
+for kk = 1:F
+    for k = 1:F
+        tempFRD = unliftfrd(frd41(:,k),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,k),F,[f fs/2],[fL fs/2/F]);
+        if mod(kk,2)
+            indices = ((kk-1)*NnL)+(k:F:(NnL+1));
+        else
+            indices = ((kk-1)*NnL)+(table(k):F:(NnL+1));
+        end
+        Gori_frd5.ResponseData(1,1,indices) = tempFRD.ResponseData(1,1,indices);
+    end
 end
 %% plotting of estimated P_H
 opts = bodeoptions;
