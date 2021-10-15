@@ -140,3 +140,37 @@ legend([plETFE,plLPM,plLifted, plNoise],{'ETFE solution','Normal LPM on rH, uH, 
 xlabel('Frequency [Hz]')
 ylabel('Difference between true system and non-parametric estimate [dB]');
 %% PFG calucation
+% ZOH filter response for cf calculation
+z = tf('z',TsH);
+Izoh=0;
+for fc=0:F-1
+    Izoh = Izoh+z^(-fc);
+end
+IzohResp = freqresp(Izoh,f);
+
+% Qd (feedback connection) calculation
+Kresp = freqresp(Kd,fL);
+Qd = (1./(1+squeeze(Kresp).*squeeze(mLifted(:,:,1:NnL)))).*squeeze(Kresp); % TODO: change 1:NnL to true? see paper oomen2007
+
+% c_f(omega0) calculation
+c = zeros(1,F,length(f));
+mLiftedRep = [squeeze(mLifted); conj(flipud(squeeze(mLifted)))];
+IzohRespRep = [squeeze(IzohResp); conj(flipud(squeeze(IzohResp)))];
+for k = 1:length(f)
+    for fc = 0:F-1
+        if fc==0
+            c(:,fc+1,k) = mLifted(:,:,k)-1/F*mLiftedRep(k)*IzohRespRep(k)*Qd(ceil(k/F))*mLiftedRep(k); % TODO: change round(k/f)
+        else
+            c(:,fc+1,k) = -1/F*mLiftedRep(k+fc/F*length(f))*IzohRespRep(k+fc/F*length(f))*Qd(ceil(k/F))*mLiftedRep(k);% TODO: change round(k/f)
+        end
+    end
+end
+
+% Aomega0 & PFG calculation
+Aomega0 = zeros(1,1,length(f));
+for k = 1:length(f)
+    for fc = 1:F
+        Aomega0(:,:,k) = Aomega0(:,:,k)+ norm(c(:,fc,k),2).^2;
+    end
+    PFG(k) = sqrt(max(eig(Aomega0(:,:,k))));
+end
