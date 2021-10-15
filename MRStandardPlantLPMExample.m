@@ -2,10 +2,10 @@ clear all; close all; clc;
 addpath('../LPM/')
 addpath('../local methods/LPM-LRM/')
 %% inputs
-n = 8;                  % window size
-degLPM = 5;             % degree of polynomial estimator
+n = 3;                  % window size
+degLPM = 1;             % degree of polynomial estimator
 F = 5;                  % down- and upsampling factor
-per = 10;                % amunt of periods in signal r(k)
+per = 6;                % amunt of periods in signal r(k)
 perSkip = 2;            % amount of (first) periods to remove from data 
 fs = 250; TsH = 1/fs;   % high/base sampling frequency
 Tend = 20-TsH;          % time of simulation
@@ -23,7 +23,7 @@ N = length(t);
 
 fSin = f(1:(length(f)/F+1)); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 fSinMulti = reshape(fSin(1:end-1),F,[])'; % uncorrelated inputs
-% fSinMulti = repmat(fSin',F,1); % correlated inputs
+% fSinMulti = repmat(fSin',1,F); % correlated inputs
 Nsin = size(fSinMulti,1);   
 
 rLift = zeros(length(tL),F);
@@ -40,8 +40,12 @@ end
 rH = rUnLift;
 %% system
 s = tf('s');
+% P = 1/(s^2+0.05*s+100);
+% K = tf(3,1);
+load('newController.mat')
 P = 5.6e3*(0.9*s^2+2*s+5.4e4)/(1.1*0.9*s^4+(1.1+0.9)*2*s^3+(1.1+0.9)*5.4e4*s^2);
-K = 0.01*(1/(0.3*2*pi)*s+1)/(1/(3*2*pi)*s+1);
+% K = 0.01*(1/(0.3*2*pi)*s+1)/(1/(3*2*pi)*s+1);
+K = shapeit_data.C_tf;
 
 Pd = c2d(P,TsH,'zoh');
 Kd = c2d(K,TsL,'zoh');
@@ -74,22 +78,15 @@ for i=N/F/per*perSkip+1:N/F
     rLifted(i-N/F/per*perSkip,:) = rH((i-1)*F+1:i*F);
 end
 %% lifted LPM
-% 1: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
-PLiftedLPM1 = LPMClosedLoopPeriodicFastBLA(uH(1+N/per*perSkip:end),yH(1+N/per*perSkip:end),rH(1+N/per*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
-
-% 2: closed loop lifted standard. Results good approximation of lifted
-% system, but not so good for unlifted
-PLiftedLPM2 = LPMClosedLoopPeriodicFastBLA(uLifted,yLifted,rLifted,n,degLPM,per-perSkip,per-1-perSkip);
-for i = 1:F
-    for ii=1:F
-        frd2(i,ii) = frd(squeeze(PLiftedLPM2(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz'); % create frd model of response data
-    end
-end
-
-% 3: regular solution: ETFE estimate
-PETFE = etfe([yH rH],256,Np)/etfe([uH rH],256,Np);
+% 1: regular solution: ETFE estimate
+PETFE = etfe([yH rH],256,Np/2+1)/etfe([uH rH],256,Np/2+1);
 PETFE.FrequencyUnit = 'Hz';
 PETFE.Frequency = PETFE.Frequency/pi*fs/2;
+
+% 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
+PLiftedLPM2 = LPMClosedLoopPeriodicFastBLA(uH(1+N/per*perSkip:end),yH(1+N/per*perSkip:end),rH(1+N/per*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
+
+
 
 % 5: double unlift on rLift-> yLift and rLift-> uLift
 PLiftedLPMN1 = LPMOpenLoopPeriodicFastBLA(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip);
@@ -101,24 +98,42 @@ for i = 1:F
     end
 end
 %% unlift using Brittani2009 (6.10)
-In = 10;
-LiftPd.ResponseData(:,:,1:In) = LiftPd.ResponseData(:,:,1:In) - repmat(reshape(logspace(4,0,In),1,1,[]),F,F,1).*randn(F,F,In); % disturb original Lifted system
+% In = 10;
+% LiftPd.ResponseData(:,:,1:In) = LiftPd.ResponseData(:,:,1:In) - repmat(reshape(logspace(4,0,In),1,1,[]),F,F,1).*randn(F,F,In); % disturb original Lifted system
 Gori_frd0 = unliftfrd(LiftPd(:,1),F,[f fs/2],[fL fs/2/F]); % system lifted and then unlifted
-Gori_frd1 = frd(squeeze(PLiftedLPM1)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
-Gori_frd2 = unliftfrd(frd2(:,1),F,[f fs/2],[fL fs/2/F]);
-Gori_frd4 = unliftfrd(frd41(:,1),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,1),F,[f fs/2],[fL fs/2/F]); 
+Gori_frd2 = frd(squeeze(PLiftedLPM2)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
+Gori_frd4 = unliftfrd(frd41(:,4),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,5),F,[f fs/2],[fL fs/2/F]); 
+Gori_frd5 = frd(zeros(1,1,length(f)+1),[f fs/2],'FrequencyUnit','Hz');
+
+for k = 1:F
+    tempFRD = unliftfrd(frd41(:,k),F,[f fs/2],[fL fs/2/F])/unliftfrd(frd42(:,k),F,[f fs/2],[fL fs/2/F]); 
+    Gori_frd5.ResponseData(1,1,k:F:length(f)+1) = tempFRD.ResponseData(1,1,k:F:end);
+end
 %% plotting of estimated P_H
 opts = bodeoptions;
 opts.FreqUnits = 'Hz';
 
-figure(1);clf
-bode(Pd,[f fs/2]*2*pi,opts); hold on;
-bode(Gori_frd0,'o'); hold on;
-bode(Gori_frd1,'y^'); hold on;
-bode(Gori_frd2,'md'); hold on;
-bode(PETFE,'rx'); hold on;
-bode(Gori_frd4,'k+'); hold on;
-xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':')
+figure(1);clf % comparison plot
+xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':'); hold on
+bode(Pd,[f fs/2]*2*pi,opts); 
+bode(Gori_frd0,'o'); 
+bode(PETFE,'rx');
+bode(Gori_frd2,'y^');
+bode(Gori_frd4,'k+');
+bode(Gori_frd5,'md');
+
+figure(2); clf; % difference plot
+[md, pd]=bode(Pd,[f fs/2]*2*pi,opts); 
+[m0, p0]=bode(Gori_frd0); 
+[mETFE, pETFE, wETFE]=bode(PETFE);
+[m2, p2]=bode(Gori_frd2);
+[m4, p4]=bode(Gori_frd4);
+[m5, p4]=bode(Gori_frd5);
+xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':'); hold on
+% semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(m1))),'o');
+% semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mETFE))),'.');
+semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(m4))),'s');
+semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(m5))),'^');
 %% PFG calucation
 
 %% OLD: DFT and plotting
