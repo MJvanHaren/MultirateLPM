@@ -28,19 +28,7 @@ NfH = length(freqH);            % amount of frequencies on high frequency grid (
 z = exp(1j*2*pi*freqH*TsH);    % high rate z
 
 GliftResponse = squeeze(GliftSIMO.ResponseData(:,:,1:NfL));     % response data of lifted system
-% GliftResponse(:,1) = GliftResponse(:,1)/2;                    % divide by 2 due to duplicate frequency?
-
-GliftSIMORespRep = zeros(F,NfH); % response of lifted system F times beyond nyquist of low sampling frequency
-% GliftSIMORespRep(:,1:NfL) = [nan(F,1) GliftResponse(:,2:end)]; % first block
-GliftSIMORespRep(:,1:NfL) = [GliftResponse(:,1:end)]; % first block
-for f=1:F-1
-    if mod(f,2)==0 % third, fifth, .... block
-        GliftSIMORespRep(:,f*(NfL-1)+2:(f+1)*(NfL-1)+1) = GliftResponse(:,2:end);
-    else % second, fourth, ... block
-%         GliftSIMORespRep(:,f*(NfL-1)+2:(f+1)*(NfL-1)+1) = conj(fliplr([nan(F,1) GliftResponse(:,2:end-1)]));
-        GliftSIMORespRep(:,f*(NfL-1)+2:(f+1)*(NfL-1)+1) = conj(fliplr([GliftResponse(:,1:end-1)]));
-    end
-end
+GliftSIMORespRep = RepSignalFreqDomain(GliftResponse',F)';      % repeat amount of times
 
 Gori_resp = zeros(1,NfH); % original system response
 for f = 0:F-1

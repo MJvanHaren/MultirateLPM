@@ -55,7 +55,6 @@ J = [0 1 1; % r as disturbance at high rate
     -1 0 0];
 Gd = lft(Pd,J);
 
-
 LiftPd = liftfrd(Pd ,F,f);
 %% downsampling
 rL = rH(1:F:end);
@@ -146,22 +145,28 @@ Izoh=0;
 for fc=0:F-1
     Izoh = Izoh+z^(-fc);
 end
-IzohResp = freqresp(Izoh,f);
+IzohResp = freqresp(Izoh,[f fs/2]*2*pi);
+PdResp = freqresp(Pd,[f fs/2]*2*pi);
+PdResp = RepSignalFreqDomain(PdResp,F);
 
 % Qd (feedback connection) calculation
-Kresp = freqresp(Kd,fL);
-Qd = (1./(1+squeeze(Kresp).*squeeze(mLifted(:,:,1:NnL)))).*squeeze(Kresp); % TODO: change 1:NnL to true? see paper oomen2007
+Kresp = squeeze(freqresp(Kd,[fL fs/2/F]*2*pi));
+Plow = DownSampleFrequencyDomain(squeeze(Gori_Lifted.ResponseData),F);
+Qd = (1./(1+Kresp.*Plow)).*Kresp; % TODO: fix Plow see paper oomen2007 % kresp validated
+QdRep = RepSignalFreqDomain(Qd,F);
 
 % c_f(omega0) calculation
 c = zeros(1,F,length(f));
-mLiftedRep = [squeeze(mLifted); conj(flipud(squeeze(mLifted)))];
-IzohRespRep = [squeeze(IzohResp); conj(flipud(squeeze(IzohResp)))];
+ctrue = zeros(1,F,length(f));
+GLiftedRep = RepSignalFreqDomain(squeeze(Gori_Lifted.ResponseData),F);
+IzohRespRep = RepSignalFreqDomain(squeeze(IzohResp),F);
+
 for k = 1:length(f)
     for fc = 0:F-1
         if fc==0
-            c(:,fc+1,k) = mLifted(:,:,k)-1/F*mLiftedRep(k)*IzohRespRep(k)*Qd(ceil(k/F))*mLiftedRep(k); % TODO: change round(k/f)
+            c(:,fc+1,k) = GLiftedRep(k)-1/F*GLiftedRep(k)*IzohRespRep(k)*QdRep(k)*GLiftedRep(k); 
         else
-            c(:,fc+1,k) = -1/F*mLiftedRep(k+fc/F*length(f))*IzohRespRep(k+fc/F*length(f))*Qd(ceil(k/F))*mLiftedRep(k);% TODO: change round(k/f)
+            c(:,fc+1,k) = -1/F*GLiftedRep(k+fc/F*length(f))*IzohRespRep(k+fc/F*length(f))*QdRep(k)*GLiftedRep(k); % TODO: change fc/F*length(f)?
         end
     end
 end
@@ -174,3 +179,18 @@ for k = 1:length(f)
     end
     PFG(k) = sqrt(max(eig(Aomega0(:,:,k))));
 end
+
+%% plotting of alleged PFG
+lowComp = inv(1+Kd*d2d(Pd,TsL))*Kd;
+
+figure(3); clf;
+plot([fL fs/2/F]*2*pi,20*log10(abs(Qd)),'Color',c2);
+hold on
+bodemag(d2d(lowComp,TsL));
+
+figure(4);clf;
+semilogx(f*2*pi,20*log10(abs(squeeze(c(:,1,:)))),'color',c2); hold on
+bodemag(Pd*(1-1/F*Izoh*d2d(lowComp,TsH)*Pd)); % c_0(omega0)
+
+figure(5);clf;
+semilogx(f*2*pi,20*log10(abs(PFG)),'color',c2); hold on
