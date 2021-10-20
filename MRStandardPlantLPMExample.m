@@ -24,21 +24,14 @@ N = length(t);
 
 fSin = f(1:(length(f)/F+1)); % TODO: check if need to add -1? (otherwise duplicates due to aliasing/imaging)
 fSinMulti = reshape(fSin(1:end-1),F,[])'; % uncorrelated inputs
-% fSinMulti = repmat(fSin',1,F); % correlated inputs
 Nsin = size(fSinMulti,1);   
 
 rLift = zeros(length(tL),F);
 for k = 1:Nsin
-%     rH = rH+exp(j*omegaSin(i)*tper); %complex sinus
-%     rH = rH+sin(2*pi*fSin(k)*tp+rand*2*pi); % real sinus
     rLift = rLift+sin(2*pi*tL*fSinMulti(k,:)+rand(1,F)*2*pi);
 end
 rLift = repmat(rLift,per,1);
-rUnLift=[];
-for i=1:N/F
-    rUnLift = [rUnLift; rLift(i,:)'];
-end
-rH = rUnLift;
+rH = liftsig(rLift,-F); % inverse lifting for simulation/identification
 %% system
 s = tf('s');
 load('newController.mat')
@@ -54,11 +47,7 @@ J = [0 1 1; % r as disturbance at high rate
     0 1 1;
     -1 0 0];
 Gd = lft(Pd,J);
-
 LiftPd = liftfrd(Pd ,F,f);
-%% downsampling
-rL = rH(1:F:end);
-NL = length(rL);
 %% simulate
 % simoutput = sim('MRStandardSimulation');
 simoutput = sim('simFile2');
@@ -68,23 +57,17 @@ uL = uH(1:F:end);
 noise = simoutput.noise;
 Noise = fft(noise)/sqrt(N);
 %% lifting of signals
-yLifted = zeros(N/F-N/F/per*perSkip,F);
-uLifted = zeros(N/F-N/F/per*perSkip,F);
-rLifted = zeros(N/F-N/F/per*perSkip,F);
-
-for i=N/F/per*perSkip+1:N/F
-    yLifted(i-N/F/per*perSkip,:) = yH((i-1)*F+1:i*F);
-    uLifted(i-N/F/per*perSkip,:) = uH((i-1)*F+1:i*F);
-    rLifted(i-N/F/per*perSkip,:) = rH((i-1)*F+1:i*F);
-end
+yLifted = liftsig(yH(Np*perSkip+1:end),F);
+uLifted = liftsig(uH(Np*perSkip+1:end),F);
+rLifted = liftsig(rH(Np*perSkip+1:end),F);
 %% lifted LPM
 % 1: regular solution: ETFE estimate
-PETFE = etfe([yH rH],256,Np/2+1)/etfe([uH rH],256,Np/2+1);
+PETFE = etfe([yH(1+Np*perSkip:end) rH(1+Np*perSkip:end)],256,Np/2+1)/etfe([uH(1+Np*perSkip:end) rH(1+Np*perSkip:end)],256,Np/2+1);
 PETFE.FrequencyUnit = 'Hz';
 PETFE.Frequency = PETFE.Frequency/pi*fs/2;
 
 % 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
-PLPM = LPMClosedLoopPeriodicFastBLA(uH(1+N/per*perSkip:end),yH(1+N/per*perSkip:end),rH(1+N/per*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
+PLPM = LPMClosedLoopPeriodicFastBLA(uH(1+Np*perSkip:end),yH(1+Np*perSkip:end),rH(1+Np*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
 
 % 3: double unlift on rLift-> yLift and rLift-> uLift
 PSLifted3 = LPMOpenLoopPeriodicFastBLA(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip);
@@ -95,13 +78,27 @@ for i = 1:F
         SLifted(i,ii) = frd(squeeze(SLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
     end
 end
+
+
 %% unlift using Brittani2009 (6.10)
 Gori_LPM = frd(squeeze(PLPM)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
 
 Gori_Lifted = frd(zeros(1,1,length(f)+1),[f fs/2],'FrequencyUnit','Hz');
+% w = exp(1j*2*pi*[fL fs/2/F]*TsL);    % low rate w
+% w = reshape(w,1,1,[]);
+% for k=1:F
+%     for kk=1:F
+%         if kk>k
+%             PSLifted.ResponseData(k,kk,:) = PSLifted.ResponseData(k,kk,:).*w;
+%             SLifted.ResponseData(k,kk,:) = SLifted.ResponseData(k,kk,:).*w;
+%         end
+%     end
+% end
 for k = 1:F
     unLiftedSystems(k) = unliftfrd(PSLifted(:,k),F,[f fs/2],[fL fs/2/F])/unliftfrd(SLifted(:,k),F,[f fs/2],[fL fs/2/F]);
 end
+
+
 table = [1 F:-1:2];
 for kk = 1:F % loop over parts [0-f/2/F] [f/2/F-f/F] etc.
     for k = 1:F % loop over columns of lifted system
