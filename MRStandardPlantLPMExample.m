@@ -3,7 +3,7 @@ addpath('../LPM/')
 addpath('../local methods/LPM-LRM/')
 [c1,c2,c3,c4,c5,c6,c7] = MatlabDefaultPlotColors();
 %% inputs
-F = 10;                 % down- and upsampling factor
+F = 5;                 % down- and upsampling factor
 n = F-1;                % window size
 degLPM = 2;             % degree of polynomial estimator
 per = 8;                % amunt of periods in signal r(k)
@@ -24,15 +24,20 @@ N = length(t);
 
 fSin = f(1:(length(f)/F+1));
 fSinMulti = reshape(fSin(1:end-1),F,[])'; % uncorrelated inputs
-% fSinMulti = repmat(fSin',1,F);
+fSinMulti = repmat(fSin',1,F); % correlated inputs: multiple experiments
 Nsin = size(fSinMulti,1);   
 
-rLift = zeros(length(tL),F);
-for k = 1:Nsin
-    rLift = rLift+sin(2*pi*tL*fSinMulti(k,:)+rand(1,F)*2*pi);
+rLift = zeros(length(tL),F,F);
+for i = 1:F
+    for k = 1:Nsin
+        rLift(:,i,i) = rLift(:,i,i)+sin(2*pi*tL*fSinMulti(k,i)+rand(1,1)*2*pi);
+    end
 end
-rLift = repmat(rLift,per,1);
-rH = liftsig(rLift,-F); % inverse lifting for simulation/identification
+rLift = repmat(rLift,per,1,1);
+for i = 1:F
+    rH(:,i) = liftsig(rLift(:,:,i),-F); % inverse lifting for simulation/identification
+end
+
 %% system
 s = tf('s');
 P = 5.6e3*(0.9*s^2+2*s+5.4e4)/(1.1*0.9*s^4+(1.1+0.9)*2*s^3+(1.1+0.9)*5.4e4*s^2);
@@ -50,49 +55,60 @@ Gd = lft(Pd,J);
 LiftPd = liftfrd(frd(Pd,f,'FrequencyUnit','Hz') ,F,f);
 %% simulate
 % simoutput = sim('MRStandardSimulation');
-simoutput = sim('simFile2');
-yH = simoutput.zeta(:,1);
-uH = simoutput.zeta(:,2);
-rH = simoutput.omega;
+for i = 1:F
+    rHexp = rH(:,i);
+    simoutput = sim('simFile2');
+    yH(:,i) = simoutput.zeta(:,1);
+    uH(:,i) = simoutput.zeta(:,2);
+%     rH = simoutput.omega;
+    %% lifting of signals
+    yLifted(:,:,i) = liftsig(yH(Np*perSkip+1:end,i),F);
+    uLifted(:,:,i) = liftsig(uH(Np*perSkip+1:end,i),F);
+    rLifted(:,:,i) = liftsig(rH(Np*perSkip+1:end,i),F);
+end
 noise = simoutput.noise;
 Noise = fft(noise)/sqrt(N);
-%% lifting of signals
-yLifted = liftsig(yH(Np*perSkip+1:end),F);
-uLifted = liftsig(uH(Np*perSkip+1:end),F);
-rLifted = liftsig(rH(Np*perSkip+1:end),F);
-%% lifted LPM
-% 1: regular solution: ETFE estimate
-PETFE = etfe([yH(1+Np*perSkip:end) rH(1+Np*perSkip:end)],120,Np/2+1)/etfe([uH(1+Np*perSkip:end) rH(1+Np*perSkip:end)],120,Np/2+1);
+
+%% Non-parametric estimates
+for i = 1:F
+    % 1: regular solution: ETFE estimate
+    PETFE(i,1) = etfe([yH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1)/etfe([uH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1);
+
+    % 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
+    PLPM(i,:,:) = LPMClosedLoopPeriodicFastBLA(uH(1+Np*perSkip:end,i),yH(1+Np*perSkip:end,i),rH(1+Np*perSkip:end,i),n,degLPM,per-perSkip,per-1-perSkip);
+end
 PETFE.FrequencyUnit = 'Hz';
 PETFE.Frequency = PETFE.Frequency/pi*fs/2;
 
-% 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
-PLPM = LPMClosedLoopPeriodicFastBLA(uH(1+Np*perSkip:end),yH(1+Np*perSkip:end),rH(1+Np*perSkip:end),n,degLPM,per-perSkip,per-1-perSkip);
-
 % 3: double unlift on rLift-> yLift and rLift-> uLift
-PSLifted3 = LPMOpenLoopPeriodicFastBLA(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip);
-SLifted3 = LPMOpenLoopPeriodicFastBLA(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip);
 for i = 1:F
-    for ii=1:F
-        PSLifted(i,ii) = frd(squeeze(PSLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-        SLifted(i,ii) = frd(squeeze(SLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-    end
+    PSLifted3(:,i,:) = LPMOpenLoopPeriodicFastBLA(rLifted(:,i,i),yLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+    SLifted3(:,i,:) = LPMOpenLoopPeriodicFastBLA(rLifted(:,i,i),uLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+end
+
+for i = 1:F % transpose because f*ck matlab
+        for ii=1:F
+            PSLifted(i,ii) = frd(squeeze(PSLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+            SLifted(i,ii) = frd(squeeze(SLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+        end
 end
 
 % 4: same as 3 but with ETFE instead of LPM
-ryLiftedID = iddata(yLifted,rLifted,TsL);
-ruLiftedID = iddata(uLifted,rLifted,TsL);
-PSLiftedETFE = etfe(ryLiftedID,120,Np/2/F+1);
-SLiftedETFE = etfe(ruLiftedID,120,Np/2/F+1);
-
-% 5: temp trials
-PSLifted51 = MRSIMOLPMOpenLoop(rLifted,yLifted,20,degLPM,per-perSkip,per-1-perSkip);
-SLifted51 = MRSIMOLPMOpenLoop(rLifted,uLifted,20,degLPM,per-perSkip,per-1-perSkip);
 for i = 1:F
-        PSLifted52(i,1) = frd(squeeze(PSLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-        SLifted52(i,1) = frd(squeeze(SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-        PLifted5(i,1) = frd(squeeze(PSLifted51(i,1,:)./SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+    ryLiftedID = iddata(yLifted(:,:,i),rLifted(:,i,i),TsL);
+    ruLiftedID = iddata(uLifted(:,:,i),rLifted(:,i,i),TsL);
+    PSLiftedETFE(:,i) = etfe(ryLiftedID,120,Np/2/F+1);
+    SLiftedETFE(:,i) = etfe(ruLiftedID,120,Np/2/F+1);
 end
+
+% % 5: temp trials
+% PSLifted51 = MRSIMOLPMOpenLoop(rLifted,yLifted,20,degLPM,per-perSkip,per-1-perSkip);
+% SLifted51 = MRSIMOLPMOpenLoop(rLifted,uLifted,20,degLPM,per-perSkip,per-1-perSkip);
+% for i = 1:F
+%         PSLifted52(i,1) = frd(squeeze(PSLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+%         SLifted52(i,1) = frd(squeeze(SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+%         PLifted5(i,1) = frd(squeeze(PSLifted51(i,1,:)./SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+% end
 %% unlift using Brittani2009 (6.10)
 Gori_LPM = frd(squeeze(PLPM)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
 
@@ -117,32 +133,35 @@ for kk = 1:F % loop over parts [0-f/2/F] [f/2/F-f/F] etc.
         Gori_Lifted_ETFE.ResponseData(1,1,indices) = unLiftedSystemsETFE(k).ResponseData(1,1,indices);
     end
 end
+Gori_Lifted = unLiftedSystems(3);
 %% plotting of estimated P_H
 [md, pd]=bode(Pd,[f fs/2]*2*pi); 
 [mETFE, pETFE]=bode(PETFE);
-[mLPM, pLPM]=bode(Gori_LPM);
+% [mLPM, pLPM]=bode(Gori_LPM);
 [mLifted, pLifted]=bode(Gori_Lifted);
 [mLiftedETFE, pLiftedETFE]=bode(Gori_Lifted_ETFE);
+[mtest, ~]=bode(unLiftedSystemsTest(3));
 
 figure(1);clf % comparison plot
 semilogx([f fs/2],20*log10(abs(squeeze(md))),':','Color',c4); hold on;
 plETFE = semilogx([f fs/2],20*log10(abs(squeeze(mETFE))),'.','Color',c1);
-plLPM = semilogx([f fs/2],20*log10(abs(squeeze(mLPM))),'o','Color',c2);
+% plLPM = semilogx([f fs/2],20*log10(abs(squeeze(mLPM))),'o','Color',c2);
 plLifted=semilogx([f fs/2],20*log10(abs(squeeze(mLifted))),'^','Color',c3);
 plLiftedETFE=semilogx([f fs/2],20*log10(abs(squeeze(mLiftedETFE))),'x','Color',c5);
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':'); 
-legend([plETFE,plLPM,plLifted,plLiftedETFE],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution'});
+% legend([plETFE,plLPM,plLifted,plLiftedETFE],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution'});
 xlabel('Frequency [Hz]')
 ylabel('Magntiude [dB]');
 
 figure(2); clf; % difference plot
-plETFE = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mETFE))),'.'); hold on;
-plLPM = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLPM))),'o');
-plLifted=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLifted))),'^');
+% plETFE = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mETFE))),'.'); hold on;
+% plLPM = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLPM))),'o');
+plLifted=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLifted))),'^'); hold on;
 plLiftedETFE=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLiftedETFE))),'x');
+plLiftedtest=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mtest))),'s');
 plNoise = semilogx(f, 20*log10(abs(Noise(1:per:per*Np/2))),':');
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':');
-legend([plETFE,plLPM,plLifted,plLiftedETFE, plNoise],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution','Output noise term'});
+% legend([plETFE,plLPM,plLifted,plLiftedETFE, plNoise],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution','Output noise term'});
 xlabel('Frequency [Hz]')
 ylabel('Difference between true system and non-parametric estimate [dB]');
 %% PFG calucation
