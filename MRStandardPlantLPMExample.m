@@ -10,6 +10,7 @@ per = 8;                % amunt of periods in signal r(k)
 perSkip = 4;            % amount of (first) periods to remove from data 
 fs = 200; TsH = 1/fs;   % high/base sampling frequency
 Tend = 20-TsH;          % time of simulation
+M = 3;                  % number of realizations of random phase experiments
 %% definitions
 tp = (0:TsH:Tend)';
 Np = length(tp);
@@ -29,8 +30,8 @@ Nsin = length(fSin);
 j=sqrt(-1);
 for p = 1:F
     for q = 1:F
-%         T(p,q) = F^(-0.5)*exp(j*2*pi*(p-1)*(q-1)/F); % orthogonal multisines (Dobrowiecki et al., 2006) TODO: fix? or change tLow etc?
-        T(p,q) = F^(-0.5)*exp(j*2*pi*(p)*(q)/F);
+        T(p,q) = F^(-0.5)*exp(j*2*pi*(p-1)*(q-1)/F); % orthogonal multisines (Dobrowiecki et al., 2006) TODO: fix? or change tLow etc?
+%         T(p,q) = F^(-0.5)*exp(j*2*pi*(p)*(q)/F); % such that frist column and row are not equal numbers?
     end
 end
 
@@ -72,6 +73,8 @@ J = [0 1 1; % r as disturbance at high rate
     -1 0 0];
 Gd = lft(Pd,J);
 LiftPd = liftfrd(frd(Pd,f,'FrequencyUnit','Hz') ,F,f);
+LiftS = liftfrd(frd(1/(1+Pd*d2d(Kd,TsH)),f,'FrequencyUnit','Hz') ,F,f);
+LiftPS = liftfrd(frd(Pd/(1+Pd*d2d(Kd,TsH)),f,'FrequencyUnit','Hz') ,F,f);
 %% simulate
 % simoutput = sim('MRStandardSimulation');
 for i = 1:F
@@ -88,35 +91,42 @@ noise = simoutput.noise;
 Noise = fft(noise)/sqrt(N);
 
 %% Non-parametric estimates
-for i = 1:F
-    % 1: regular solution: ETFE estimate
-    PETFE(i,1) = etfe([yH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1)/etfe([uH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1);
-
-    % 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
-    PLPM(i,:,:) = LPMClosedLoopPeriodicFastBLA(uH(1+Np*perSkip:end,i),yH(1+Np*perSkip:end,i),rH(1+Np*perSkip:end,i),n,degLPM,per-perSkip,per-1-perSkip);
-end
-PETFE.FrequencyUnit = 'Hz';
-PETFE.Frequency = PETFE.Frequency/pi*fs/2;
+% for i = 1:F
+%     % 1: regular solution: ETFE estimate
+%     PETFE(i,1) = etfe([yH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1)/etfe([uH(1+Np*perSkip:end,i) rH(1+Np*perSkip:end,i)],120,Np/2+1);
+% 
+%     % 2: standard closed loop identification using uH,rH and yH, i.e. ignoring LPTV
+%     PLPM(i,:,:) = LPMClosedLoopPeriodicFastBLA(uH(1+Np*perSkip:end,i),yH(1+Np*perSkip:end,i),rH(1+Np*perSkip:end,i),n,degLPM,per-perSkip,per-1-perSkip);
+% end
+% PETFE.FrequencyUnit = 'Hz';
+% PETFE.Frequency = PETFE.Frequency/pi*fs/2;
 
 % 3: double unlift on rLift-> yLift and rLift-> uLift
 ZkhPS = zeros(2*F,F,NnL+1);
 ZkhS = zeros(2*F,F,NnL+1);
 for i = 1:F
-    [~,~,~,ZkhPS(:,i,:)] = LPMOpenLoopPeriodicFastBLA(rLifted(:,:,i),yLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+    [zes,~,~,ZkhPS(:,i,:)] = LPMOpenLoopPeriodicFastBLA(rLifted(:,:,i),yLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
 %     PSLifted3(:,i,:)
     [~,~,~,ZkhS(:,i,:)]= LPMOpenLoopPeriodicFastBLA(rLifted(:,:,i),uLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
 %      SLifted3(:,i,:)
 end
 for k = 1:NnL+1
-   temp(:,:,k) =  ZkhPS(1:F,:,k)/ZkhPS(F+1:end,:,k);
+   temp2(:,:,k) = ZkhPS(:,:,k)*(T*Dphi(:,:,k))'; % TODO: change Dphi?, see (7-86) pintelon2012
+   temp3(:,:,k) = temp2(1:F,:,k)/temp2(F+1:end,:,k);
+   temp4(:,:,k) = ZkhS(:,:,k)*(T*Dphi(:,:,k))'; % TODO: change Dphi?, see (7-86) pintelon2012
+   temp5(:,:,k) = temp4(1:F,:,k)/temp4(F+1:end,:,k);
 end
 
 for i = 1:F % transpose because f*ck matlab
         for ii=1:F
-            PSLifted(i,ii) = frd(squeeze(PSLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-            SLifted(i,ii) = frd(squeeze(SLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+%             PSLifted(i,ii) = frd(squeeze(PSLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+%             SLifted(i,ii) = frd(squeeze(SLifted3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+            PSLiftedTemp(i,ii) = frd(squeeze(temp3(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+            SLiftedTemp(i,ii) = frd(squeeze(temp5(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
         end
 end
+PLiftedTemp = PSLiftedTemp/SLiftedTemp;
+Ptemp = unliftfrd(PLiftedTemp(:,1),F,[f fs/2],[fL fs/2/F]);
 
 % 4: same as 3 but with ETFE instead of LPM
 for i = 1:F
