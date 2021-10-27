@@ -22,20 +22,39 @@ t = (0:TsH:per*(tp(end)+TsH)-TsH)';
 tL = (0:TsL:Tend)';
 N = length(t);
 
-fSin = f(1:(length(f)/F+1));
-fSinMulti = reshape(fSin(1:end-1),F,[])'; % uncorrelated inputs
-fSinMulti = repmat(fSin',1,F); % correlated inputs: multiple experiments
-Nsin = size(fSinMulti,1);   
+%% reference design
+fSin = f(1:(length(f)/F+1)); % only exciting low frequency band, wil alias/image to others
+Nsin = length(fSin);
 
-rLift = zeros(length(tL),F,F);
-for i = 1:F
-    for k = 1:Nsin
-        rLift(:,i,i) = rLift(:,i,i)+sin(2*pi*tL*fSinMulti(k,i)+rand(1,1)*2*pi);
+j=sqrt(-1);
+for p = 1:F
+    for q = 1:F
+%         T(p,q) = F^(-0.5)*exp(j*2*pi*(p-1)*(q-1)/F); % orthogonal multisines (Dobrowiecki et al., 2006) TODO: fix? or change tLow etc?
+        T(p,q) = F^(-0.5)*exp(j*2*pi*(p)*(q)/F);
     end
 end
-rLift = repmat(rLift,per,1,1);
+
+RSISO = ones(2*NnL,1).*exp(j*rand(2*NnL,1)*2*pi); % random phase (SISO) multisines (Definition 3.1 pintelon2012)
+
+DR = zeros(F,F,2*NnL);
+Dphi = zeros(F,F,2*NnL);
+for k = 1:2*NnL
+    for p = 1:F
+        for q = 1:F
+            if p==q
+                DR(p,q,k) = RSISO(k);
+                Dphi(p,q,k) = exp(j*rand*2*pi);
+            end
+        end
+    end
+    Rfat(:,:,k) = DR(:,:,k)*T*Dphi(:,:,k); % Pintelon2012 (3-31) full random orthogonal multisines
+end
+
+rOrthogonal = real(ifft(Rfat,[],3));
+rOrthogonalPeriodic = repmat(rOrthogonal,1,1,per);
+
 for i = 1:F
-    rH(:,i) = liftsig(rLift(:,:,i),-F); % inverse lifting for simulation/identification
+    rH(:,i) = liftsig(squeeze(rOrthogonalPeriodic(:,i,:))',-F); % inverse lifting for simulation/identification
 end
 
 %% system
@@ -60,8 +79,7 @@ for i = 1:F
     simoutput = sim('simFile2');
     yH(:,i) = simoutput.zeta(:,1);
     uH(:,i) = simoutput.zeta(:,2);
-%     rH = simoutput.omega;
-    %% lifting of signals
+    % lifting of signals
     yLifted(:,:,i) = liftsig(yH(Np*perSkip+1:end,i),F);
     uLifted(:,:,i) = liftsig(uH(Np*perSkip+1:end,i),F);
     rLifted(:,:,i) = liftsig(rH(Np*perSkip+1:end,i),F);
@@ -81,9 +99,16 @@ PETFE.FrequencyUnit = 'Hz';
 PETFE.Frequency = PETFE.Frequency/pi*fs/2;
 
 % 3: double unlift on rLift-> yLift and rLift-> uLift
+ZkhPS = zeros(2*F,F,NnL+1);
+ZkhS = zeros(2*F,F,NnL+1);
 for i = 1:F
-    PSLifted3(:,i,:) = LPMOpenLoopPeriodicFastBLA(rLifted(:,i,i),yLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
-    SLifted3(:,i,:) = LPMOpenLoopPeriodicFastBLA(rLifted(:,i,i),uLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+    [~,~,~,ZkhPS(:,i,:)] = LPMOpenLoopPeriodicFastBLA(rLifted(:,:,i),yLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+%     PSLifted3(:,i,:)
+    [~,~,~,ZkhS(:,i,:)]= LPMOpenLoopPeriodicFastBLA(rLifted(:,:,i),uLifted(:,:,i),n,degLPM,per-perSkip,per-1-perSkip);
+%      SLifted3(:,i,:)
+end
+for k = 1:NnL+1
+   temp(:,:,k) =  ZkhPS(1:F,:,k)/ZkhPS(F+1:end,:,k);
 end
 
 for i = 1:F % transpose because f*ck matlab
@@ -101,14 +126,6 @@ for i = 1:F
     SLiftedETFE(:,i) = etfe(ruLiftedID,120,Np/2/F+1);
 end
 
-% % 5: temp trials
-% PSLifted51 = MRSIMOLPMOpenLoop(rLifted,yLifted,20,degLPM,per-perSkip,per-1-perSkip);
-% SLifted51 = MRSIMOLPMOpenLoop(rLifted,uLifted,20,degLPM,per-perSkip,per-1-perSkip);
-% for i = 1:F
-%         PSLifted52(i,1) = frd(squeeze(PSLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-%         SLifted52(i,1) = frd(squeeze(SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-%         PLifted5(i,1) = frd(squeeze(PSLifted51(i,1,:)./SLifted51(i,1,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-% end
 %% unlift using Brittani2009 (6.10)
 Gori_LPM = frd(squeeze(PLPM)',[f fs/2],TsH,'FrequencyUnit','Hz'); % does not need to unlift
 
