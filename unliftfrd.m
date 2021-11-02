@@ -25,14 +25,14 @@ TsL = GliftSIMO.Ts;             % sampling time low sampling frequency
 TsH = TsL/F;                    % sampling time high sampling frequency
 NfL = length(freqL);            % amount of frequencies on low frequency grid
 NfH = length(freqH);            % amount of frequencies on high frequency grid (=F*(NfL-1)+1)
-z = exp(1j*2*pi*freqH*TsH);    % high rate z
+z = exp(1j*2*pi*freqH*TsH);     % high rate z
 
 GliftResponse = squeeze(GliftSIMO.ResponseData(:,:,1:NfL));     % response data of lifted system
 GliftSIMORespRep = RepSignalFreqDomain(GliftResponse',F)';      % repeat amount of times
 
 Gori_resp = zeros(1,NfH); % original system response
 for f = 0:F-1
-    Gori_resp = Gori_resp + GliftSIMORespRep(f+1,:).*z.^(-f); % (6.10) Bittanti2009 TRANSPOSE OR NOT MAKES A BIG DIFFERNECE
+    Gori_resp = Gori_resp + GliftSIMORespRep(f+1,:).*z.^(-f); % (6.10) Bittanti2009 
 end
 Gori_frd = frd(Gori_resp,freqH,TsH,'FrequencyUnit','Hz'); % original system frd
 end
