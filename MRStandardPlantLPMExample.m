@@ -6,11 +6,11 @@ addpath('../local methods/LPM-LRM/')
 F = 5;                 % down- and upsampling factor
 n = F-1;                % window size
 degLPM = 2;             % degree of polynomial estimator
-per = 8;                % amunt of periods in signal r(k)
-perSkip = 2;            % amount of (first) periods to remove from data 
+per = 6;                % amunt of periods in signal r(k)
+perSkip = 2;            % amount of (first) periods to remove from data (>2 for robust frm!)
 fs = 200; TsH = 1/fs;   % high/base sampling frequency
-Tend = 20-TsH;          % time of simulation
-M = 3;                  % number of realizations of random phase experiments
+Tend = 30-TsH;          % time of simulation
+M = 3;                  % number of realizations of random phase experiments (TODO)
 %% definitions
 tp = (0:TsH:Tend)';
 Np = length(tp);
@@ -103,14 +103,22 @@ Gori_LPM = frd(squeeze(PLPM)',[f fs/2],TsH,'FrequencyUnit','Hz');
 [PSLifted,~,~] = LPMOpenLoopPeriodicRobustFRM(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi);
 [SLifted,~,~] = LPMOpenLoopPeriodicRobustFRM(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi);
 
+[PSLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F);
+[SLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F); % mirrored for rows?
+
 for i = 1:F % transpose because f*ck matlab
         for ii=1:F
             PSLiftedFRD(i,ii) = frd(squeeze(PSLifted(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
             SLiftedFRD(i,ii) = frd(squeeze(SLifted(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
+            PSLiftedRepFRD(i,ii,:) = frd(squeeze(PSLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz');
+            SLiftedRepFRD(i,ii,:) = frd(squeeze(SLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz');
         end
 end
 PLiftedFRD = PSLiftedFRD/SLiftedFRD;
 PMRLiftedLPM = unliftfrd(PLiftedFRD(:,1),F,[f fs/2],[fL fs/2/F]); % unlift using Brittani2009 (6.10)
+
+PLiftedRepFRD = PSLiftedRepFRD/SLiftedRepFRD;
+PMRLiftedLPMRep = unliftfrdWithoutRep(PLiftedRepFRD(:,1),F,[f fs/2]);
 
 % 4: same as 3 but with ETFE instead of LPM and using only one experiment (the first)
 ryLiftedID = iddata(yLifted(:,:,1),rLifted(:,:,1),TsL);
