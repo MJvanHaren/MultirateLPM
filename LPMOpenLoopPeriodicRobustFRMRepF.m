@@ -25,16 +25,21 @@ Ny = size(y,2); % number of outputs
 
 K1 = @(r) (r*ones(R+1,1)).^((0:R)'); % basis for LPM
 
-Nn = (Nnori-1)*F+1; % 
+Nn = (Nnori-1)*F+1; 
+% Nn = ((Nnori*P-1)*F+1)/P;
 
 Zkh = zeros(2*Nu,Nu,Nn);
+
+Dphi = repmat(Dphi,1,1,F);
 
 for expNr = 1:Nu
     Uf=fft(u(:,:,expNr))/sqrt(N); % correct Pintelon2012 (7-66)
     Yf=fft(y(:,:,expNr))/sqrt(N); % correct Pintelon2012 (7-66)
 
-    Yk = [RepSignalFreqDomain(Yf(1:floor(N/2)+1,:),F)' Yf(ceil(N/2)+1,:)']; % up to nyquist frequency
-    Uk = [ RepSignalFreqDomain(Uf(1:floor(N/2)+1,:),F)' Uf(ceil(N/2)+1,:)'];
+    Yk = [RepSignalFreqDomain(Yf(1:floor(N/2)+1,:),F)' Yf(floor(N/2)+2,:)']; % up to nyquist frequency, 1:P:end is correct
+    Uk = [ RepSignalFreqDomain(Uf(1:floor(N/2)+1,:),F)' Uf(floor(N/2)+2,:)'];
+%     Yk = [RepSignalFreqDomain(Yf(1:P*Nnori,:),F)']; % up to nyquist frequency, 1:P:end is not correct due to flipping. BUT this seems the right implementation
+%     Uk = [ RepSignalFreqDomain(Uf(1:P*Nnori,:),F)'];
     
     Zk = [Yk;Uk];       % Pintelon 2012 (7-48)
     %% suppress noise transient contribution
@@ -68,12 +73,12 @@ for expNr = 1:Nu
         thetaHat(:,:,k) = thetaHat(:,:,k)/Dscale;
     end
     THz = squeeze(thetaHat(:,1,:));
-    Zkh(:,expNr,:) = Zk(:,1:P:end)-THz; %TODO: performance is better without -THz?
+    Zkh(:,expNr,:) = Zk(:,1:P:Nn*P)-THz; %TODO: performance is better without -THz?
 %     Zkh(:,expNr,:) = Zk(:,1:P:end);
 end
 ZRkh = zeros(2*Nu,Nu,Nn);
 for k = 1:Nn
-    ZRkh(:,:,k) = Zkh(:,:,k);
+    ZRkh(:,:,k) = Zkh(:,:,k)*(T*Dphi(:,:,k))';
     G_LPM(:,:,k) = ZRkh(1:Nu,:,k)/ZRkh(Nu+1:end,:,k);
 end
 end

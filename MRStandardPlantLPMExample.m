@@ -6,10 +6,10 @@ addpath('../local methods/LPM-LRM/')
 F = 5;                 % down- and upsampling factor
 n = F-1;                % window size
 degLPM = 2;             % degree of polynomial estimator
-per = 6;                % amunt of periods in signal r(k)
+per = 8;                % amunt of periods in signal r(k)
 perSkip = 2;            % amount of (first) periods to remove from data (>2 for robust frm!)
 fs = 200; TsH = 1/fs;   % high/base sampling frequency
-Tend = 30-TsH;          % time of simulation
+Tend = 5-TsH;          % time of simulation
 M = 3;                  % number of realizations of random phase experiments (TODO)
 %% definitions
 tp = (0:TsH:Tend)';
@@ -103,24 +103,28 @@ Gori_LPM = frd(squeeze(PLPM)',[f fs/2],TsH,'FrequencyUnit','Hz');
 [PSLifted,~,~] = LPMOpenLoopPeriodicRobustFRM(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi);
 [SLifted,~,~] = LPMOpenLoopPeriodicRobustFRM(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi);
 
-[PSLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F);
-[SLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F); % mirrored for rows?
-
 for i = 1:F % transpose because f*ck matlab
         for ii=1:F
             PSLiftedFRD(i,ii) = frd(squeeze(PSLifted(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
             SLiftedFRD(i,ii) = frd(squeeze(SLifted(i,ii,:))',[fL fs/2/F],TsL,'FrequencyUnit','Hz');
-            PSLiftedRepFRD(i,ii,:) = frd(squeeze(PSLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz');
-            SLiftedRepFRD(i,ii,:) = frd(squeeze(SLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz');
         end
 end
 PLiftedFRD = PSLiftedFRD/SLiftedFRD;
 PMRLiftedLPM = unliftfrd(PLiftedFRD(:,1),F,[f fs/2],[fL fs/2/F]); % unlift using Brittani2009 (6.10)
 
+% 4: Same as 3, but now with smoothness over complete domain instead of Lifted domain
+[PSLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,yLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F); % TODO: implement Dphi in algorithm?
+[SLiftedRep,~,~] = LPMOpenLoopPeriodicRobustFRMRepF(rLifted,uLifted,n,degLPM,per-perSkip,per-1-perSkip,T,Dphi,F);
+for i = 1:F % transpose because f*ck matlab
+        for ii=1:F
+            PSLiftedRepFRD(i,ii,:) = frd(squeeze(PSLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz'); 
+            SLiftedRepFRD(i,ii,:) = frd(squeeze(SLiftedRep(i,ii,:))',[f fs/2],TsH,'FrequencyUnit','Hz');
+        end
+end
 PLiftedRepFRD = PSLiftedRepFRD/SLiftedRepFRD;
 PMRLiftedLPMRep = unliftfrdWithoutRep(PLiftedRepFRD(:,1),F,[f fs/2]);
 
-% 4: same as 3 but with ETFE instead of LPM and using only one experiment (the first)
+% 5: same as 3 but with ETFE instead of LPM and using only one experiment (the first)
 ryLiftedID = iddata(yLifted(:,:,1),rLifted(:,:,1),TsL);
 ruLiftedID = iddata(uLifted(:,:,1),rLifted(:,:,1),TsL);
 PSLiftedETFE = etfe(ryLiftedID,120,Np/2/F+1);
@@ -132,6 +136,7 @@ PETFELifted = unliftfrd(PLiftedETFE(:,1),F,[f fs/2],[fL fs/2/F]); % unlift using
 [mETFE, pETFE]=bode(PETFE);
 [mLPM, pLPM]=bode(Gori_LPM);
 [mLifted, pLifted]=bode(PMRLiftedLPM);
+[mLiftedRep, pLiftedRep]=bode(PMRLiftedLPMRep);
 [mLiftedETFE, pLiftedETFE]=bode(PETFELifted);
 
 figure(1);clf % comparison plot
@@ -139,9 +144,10 @@ semilogx([f fs/2],20*log10(abs(squeeze(md))),':','Color',c4); hold on;
 plETFE = semilogx([f fs/2],20*log10(abs(squeeze(mETFE))),'.','Color',c1);
 plLPM = semilogx([f fs/2],20*log10(abs(squeeze(mLPM))),'o','Color',c2);
 plLifted=semilogx([f fs/2],20*log10(abs(squeeze(mLifted))),'^','Color',c3);
-plLiftedETFE=semilogx([f fs/2],20*log10(abs(squeeze(mLiftedETFE))),'x','Color',c5);
+plLiftedRep=semilogx([f fs/2],20*log10(abs(squeeze(mLiftedRep))),'s','Color',c5);
+plLiftedETFE=semilogx([f fs/2],20*log10(abs(squeeze(mLiftedETFE))),'x','Color',c6);
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':'); 
-legend([plETFE,plLPM,plLifted,plLiftedETFE],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution'});
+legend([plETFE,plLPM,plLifted,plLiftedRep,plLiftedETFE],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR LPM solution on whole domain','Lifted-MR ETFE solution'});
 xlabel('Frequency [Hz]')
 ylabel('Magntiude [dB]');
 
@@ -149,10 +155,11 @@ figure(2); clf; % difference plot
 plETFE = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mETFE))),'.'); hold on;
 plLPM = semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLPM))),'o');
 plLifted=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLifted))),'^'); hold on;
+plLiftedRep=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLiftedRep))),'s'); hold on;
 plLiftedETFE=semilogx([f fs/2], 20*log10(abs(squeeze(md)-squeeze(mLiftedETFE))),'x');
 plNoise = semilogx(f, 20*log10(abs(Noise(1:per:per*Np/2))),':');
 xline([fs/F fs/F/2 fs/F*1.5 fs/F*2 fs/F*2.5 fs/F*3],':');
-legend([plETFE,plLPM,plLifted,plLiftedETFE, plNoise],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR ETFE solution','Output noise term'});
+legend([plETFE,plLPM,plLifted,plLiftedRep,plLiftedETFE],{'ETFE solution','Normal LPM on rH, uH, yH','Lifted-MR LPM solution','Lifted-MR LPM solution on whole domain','Lifted-MR ETFE solution'});
 xlabel('Frequency [Hz]')
 ylabel('Difference between true system and non-parametric estimate [dB]');
 %% PFG calucation
@@ -197,17 +204,17 @@ for k = 1:length(f)
     PFG(k) = sqrt(max(eig(Aomega0(:,:,k))));
 end
 
-%% plotting of alleged PFG
-lowComp = inv(1+Kd*d2d(Pd,TsL))*Kd;
-
-figure(3); clf;
-plot([fL fs/2/F]*2*pi,20*log10(abs(Qd)),'Color',c2);
-hold on
-bodemag(d2d(lowComp,TsL));
-
-figure(4);clf;
-semilogx(f*2*pi,20*log10(abs(squeeze(c(:,1,:)))),'color',c2); hold on
-bodemag(Pd*(1-1/F*Izoh*d2d(lowComp,TsH)*Pd)); % c_0(omega0)
-
-figure(5);clf;
-semilogx(f*2*pi,20*log10(abs(PFG)),'color',c2); hold on
+% %% plotting of alleged PFG
+% lowComp = inv(1+Kd*d2d(Pd,TsL))*Kd;
+% 
+% figure(3); clf;
+% plot([fL fs/2/F]*2*pi,20*log10(abs(Qd)),'Color',c2);
+% hold on
+% bodemag(d2d(lowComp,TsL));
+% 
+% figure(4);clf;
+% semilogx(f*2*pi,20*log10(abs(squeeze(c(:,1,:)))),'color',c2); hold on
+% bodemag(Pd*(1-1/F*Izoh*d2d(lowComp,TsH)*Pd)); % c_0(omega0)
+% 
+% figure(5);clf;
+% semilogx(f*2*pi,20*log10(abs(PFG)),'color',c2); hold on

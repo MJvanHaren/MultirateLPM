@@ -14,14 +14,13 @@ function Gori_frd = unliftfrdWithoutRep(GliftSIMO,F,freqH)
 
 % reshape frequency vectors
 freqH = reshape(freqH,1,[]);
-GliftSIMORespRep = squeeze(GliftSIMO.ResponseData); 
 
 % sampling times
-TsH = 1/(freqH(end)-freqH(end-1));                    % sampling time high sampling frequency
-NfH = length(freqH);            % amount of frequencies on high frequency grid (=F*(NfL-1)+1)
-z = exp(1j*2*pi*freqH*TsH);     % high rate z
+TsH = GliftSIMO.Ts;
+NfH = length(freqH);                                    % amount of frequencies on high frequency grid (=F*(NfL-1)+1)
+z = exp(1j*2*pi*freqH*TsH);                         % high rate z
 
-% GliftSIMORespRep = RepSignalFreqDomain(GliftResponse',F)';      % repeat amount of times
+GliftSIMORespRep = squeeze(GliftSIMO.ResponseData); 
 
 Gori_resp = zeros(1,NfH); % original system response
 for f = 0:F-1
